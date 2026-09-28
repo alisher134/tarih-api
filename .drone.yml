@@ -27,9 +27,9 @@ steps:
       script:
         - cd /root/tarih/tarih-api # Замените на реальный путь
         # Скачиваем ТОЛЬКО обновленный образ (без клонирования кода)
-        - docker-compose -f docker-compose.prod.yml pull api
+        - docker compose -f docker-compose.prod.yml pull api
         # Перезапускаем контейнер
-        - docker-compose -f docker-compose.prod.yml up -d api
+        - docker compose -f docker-compose.prod.yml up -d api
         - echo "Tarih API успешно задеплоен по Варианту 2!"
 
 trigger:
