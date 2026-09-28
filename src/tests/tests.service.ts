@@ -221,6 +221,49 @@ export class TestsService {
     return attempt;
   }
 
+  async getActiveAttempt(user: PublicUser, testId: string) {
+    const test = await this.prisma.lessonTest.findUnique({
+      where: { id: testId },
+    });
+
+    if (!test) {
+      throw new NotFoundException(`Test ${testId} not found`);
+    }
+
+    const inProgressAttempt = await this.prisma.testAttempt.findFirst({
+      where: {
+        userId: user.id,
+        testId,
+        completedAt: null,
+      },
+    });
+
+    if (!inProgressAttempt) {
+      throw new NotFoundException("Active attempt not found");
+    }
+
+    if (
+      test.timeLimit != null &&
+      this.isAttemptExpired(inProgressAttempt.startedAt, test.timeLimit)
+    ) {
+      await this.prisma.testAttempt.update({
+        where: { id: inProgressAttempt.id },
+        data: {
+          completedAt: new Date(),
+          score: 0,
+          passed: false,
+        },
+      });
+
+      throw new BadRequestApiException(
+        API_ERROR_CODE.TEST_TIME_LIMIT_EXCEEDED,
+        "Test time limit exceeded",
+      );
+    }
+
+    return inProgressAttempt;
+  }
+
   async getAttemptDraft(user: PublicUser, attemptId: string) {
     const attempt = await this.loadOwnedInProgressAttempt(user, attemptId);
 

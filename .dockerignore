@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.git
+.gitignore
+.agents
+.husky
+.env
+.env.*
+!.env.example
+*.md
+test
+.DS_Store
+npm-debug.log*

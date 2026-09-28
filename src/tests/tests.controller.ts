@@ -42,6 +42,15 @@ export class TestsController {
     return this.testsService.startAttempt(req.user, testId);
   }
 
+  @Get("tests/:testId/attempts/active")
+  @UseGuards(JwtAuthGuard)
+  getActiveAttempt(
+    @Param("testId") testId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.testsService.getActiveAttempt(req.user, testId);
+  }
+
   @Get("test-attempts/:attemptId/draft")
   @UseGuards(JwtAuthGuard)
   getAttemptDraft(
