@@ -1,6 +1,42 @@
 import { CourseEnrollmentStatus } from "../../generated/prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 
+export async function recalculateAllCourseEnrollmentsProgress(
+  prisma: PrismaService,
+  courseId: string,
+): Promise<void> {
+  const enrollments = await prisma.courseEnrollment.findMany({
+    where: { courseId },
+    select: { userId: true },
+  });
+
+  for (const enrollment of enrollments) {
+    await recalculateCourseEnrollmentProgress(
+      prisma,
+      enrollment.userId,
+      courseId,
+    );
+  }
+}
+
+export async function recalculateAllEnrollmentsForUser(
+  prisma: PrismaService,
+  userId: string,
+): Promise<void> {
+  const enrollments = await prisma.courseEnrollment.findMany({
+    where: { userId },
+    select: { courseId: true },
+  });
+
+  for (const enrollment of enrollments) {
+    await recalculateCourseEnrollmentProgress(
+      prisma,
+      userId,
+      enrollment.courseId,
+    );
+  }
+}
+
 export async function recalculateCourseEnrollmentProgress(
   prisma: PrismaService,
   userId: string,

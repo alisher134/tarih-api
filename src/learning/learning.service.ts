@@ -22,6 +22,14 @@ export class LearningService {
   ) {}
 
   async getContinueLearning(user: PublicUser) {
+    const hasAccess =
+      user.isAdmin ||
+      (await this.subscriptionsService.hasActiveSubscription(user.id));
+
+    if (!hasAccess) {
+      return null;
+    }
+
     const enrollment = await this.prisma.courseEnrollment.findFirst({
       where: {
         userId: user.id,
@@ -58,14 +66,6 @@ export class LearningService {
           nextAction: courseContext.state.nextAction,
         };
       }
-    }
-
-    const hasAccess =
-      user.isAdmin ||
-      (await this.subscriptionsService.hasActiveSubscription(user.id));
-
-    if (!hasAccess) {
-      return null;
     }
 
     const firstCourse = await this.prisma.course.findFirst({

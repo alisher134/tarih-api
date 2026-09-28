@@ -13,6 +13,7 @@ import {
   mergeCourseFavorites,
   mergeLessonProgress,
 } from "../common/enrollment/ensure-enrollment";
+import { recalculateAllEnrollmentsForUser } from "../common/progress/course-progress";
 import { PrismaService } from "../prisma/prisma.service";
 import { USER_PUBLIC_SELECT, type PublicUser } from "./users.service";
 
@@ -41,8 +42,9 @@ export class TelegramUsersService {
     lastName: string;
   }): Promise<PublicUser> {
     const normalizedEmail = input.email.trim().toLowerCase();
+    let mergedUserId: string | null = null;
 
-    return this.prisma.$transaction(async (tx) => {
+    const user = await this.prisma.$transaction(async (tx) => {
       const existingByTelegram = await tx.user.findUnique({
         where: { telegramId: input.telegramId },
       });
@@ -101,6 +103,8 @@ export class TelegramUsersService {
         });
 
         await tx.user.delete({ where: { id: existingByTelegram.id } });
+
+        mergedUserId = existingByEmail.id;
 
         this.logger.log({
           event: "TELEGRAM_USER_MERGED",
@@ -168,6 +172,12 @@ export class TelegramUsersService {
         throw error;
       }
     });
+
+    if (mergedUserId) {
+      await recalculateAllEnrollmentsForUser(this.prisma, mergedUserId);
+    }
+
+    return user;
   }
 
   private async reassignUserRelations(

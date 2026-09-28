@@ -57,17 +57,53 @@ export class SubscriptionsService {
     });
   }
 
-  getPurchaseLink() {
+  async getPurchaseLink(planId?: string) {
     if (!this.telegramBotUsername) {
       throw new NotFoundException("Telegram purchase is not configured");
     }
 
+    let startParam = "purchase";
+
+    if (planId) {
+      const plan = await this.findActivePlanById(planId);
+      if (!plan) {
+        throw new NotFoundException(`Subscription plan ${planId} not found`);
+      }
+      startParam = `plan_${plan.slug}`;
+    }
+
     return {
       channel: "telegram" as const,
-      url: `https://t.me/${this.telegramBotUsername}?start=purchase`,
+      url: `https://t.me/${this.telegramBotUsername}?start=${startParam}`,
       instructions:
         "Open the Telegram bot, complete purchase, and upload your payment receipt there.",
     };
+  }
+
+  findActivePlanById(planId: string) {
+    return this.prisma.subscriptionPlan.findFirst({
+      where: { id: planId, isActive: true },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        durationMonths: true,
+        priceKzt: true,
+      },
+    });
+  }
+
+  findActivePlanBySlug(slug: string) {
+    return this.prisma.subscriptionPlan.findFirst({
+      where: { slug, isActive: true },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        durationMonths: true,
+        priceKzt: true,
+      },
+    });
   }
 
   async getCurrentSubscription(userId: string) {

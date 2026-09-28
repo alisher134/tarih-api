@@ -33,7 +33,9 @@ export class UsersController {
 
   @Post()
   async create(@Body() dto: CreateUserDto) {
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     if (existing) throw new ConflictException();
     return this.prisma.user.create({ data: dto });
   }
@@ -122,13 +124,13 @@ async findById(id: string) {
 }
 ```
 
-| Case | Exception |
-|------|-----------|
-| Invalid input | `BadRequestException` |
-| Not found | `NotFoundException` |
-| Duplicate / conflict | `ConflictException` |
-| Auth missing | `UnauthorizedException` |
-| Forbidden | `ForbiddenException` |
+| Case                 | Exception               |
+| -------------------- | ----------------------- |
+| Invalid input        | `BadRequestException`   |
+| Not found            | `NotFoundException`     |
+| Duplicate / conflict | `ConflictException`     |
+| Auth missing         | `UnauthorizedException` |
+| Forbidden            | `ForbiddenException`    |
 
 ## Config and env
 

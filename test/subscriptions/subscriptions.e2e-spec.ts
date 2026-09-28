@@ -120,6 +120,17 @@ describe("Subscriptions (e2e)", () => {
     expect(body.url).toBe("https://t.me/tarih_bot?start=purchase");
   });
 
+  it("returns telegram purchase link with plan slug when planId is provided", async () => {
+    const response = await request(app.getHttpServer())
+      .get(apiPath(`/subscriptions/purchase-link?planId=${planId}`))
+      .set("Authorization", `Bearer ${studentAccessToken}`)
+      .expect(200);
+
+    const body = readBody<{ channel: string; url: string }>(response.body);
+    expect(body.channel).toBe("telegram");
+    expect(body.url).toBe("https://t.me/tarih_bot?start=plan_1-month");
+  });
+
   it("grants subscription via admin and returns remaining time", async () => {
     const grantResponse = await request(app.getHttpServer())
       .post(apiPath(`/admin/users/${studentUserId}/subscriptions`))

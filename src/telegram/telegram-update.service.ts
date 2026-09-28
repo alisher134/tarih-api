@@ -39,6 +39,7 @@ import {
   inferReceiptExtension,
   isValidEmail,
   parseFullName,
+  parsePlanSlugFromStart,
 } from "./telegram.validation";
 
 @Injectable()
@@ -128,12 +129,9 @@ export class TelegramUpdateService implements OnModuleInit {
 
       await this.sessionService.resetToStart(telegramId);
 
-      if (startPayload === "purchase") {
-        await this.startPurchaseFlow(
-          telegramId,
-          chatId,
-          this.getLanguage(data),
-        );
+      if (
+        await this.handleStartPayload(telegramId, chatId, startPayload, data)
+      ) {
         return;
       }
 
@@ -229,8 +227,15 @@ export class TelegramUpdateService implements OnModuleInit {
       const messages = getBotMessages(language);
       await this.telegramApi.sendMessage(chatId, messages.languageChanged);
 
-      if (startPayload === "purchase") {
-        await this.startPurchaseFlow(telegramId, chatId, language);
+      if (
+        await this.handleStartPayload(
+          telegramId,
+          chatId,
+          startPayload,
+          sessionData,
+          language,
+        )
+      ) {
         return;
       }
 
@@ -507,15 +512,51 @@ export class TelegramUpdateService implements OnModuleInit {
     });
   }
 
+  private async handleStartPayload(
+    telegramId: string,
+    chatId: number,
+    startPayload: string | undefined,
+    sessionData: TelegramSessionData,
+    lang?: BotLanguage,
+  ): Promise<boolean> {
+    const language = lang ?? this.getLanguage(sessionData);
+
+    if (startPayload === "purchase") {
+      await this.startPurchaseFlow(telegramId, chatId, language);
+      return true;
+    }
+
+    const planSlug = parsePlanSlugFromStart(startPayload);
+    if (!planSlug) {
+      return false;
+    }
+
+    const plan = await this.subscriptionsService.findActivePlanBySlug(planSlug);
+    const messages = getBotMessages(language);
+
+    if (!plan) {
+      await this.telegramApi.sendMessage(chatId, messages.planUnavailable);
+      await this.sendMainMenu(chatId, language);
+      return true;
+    }
+
+    await this.startPurchaseFlow(telegramId, chatId, language, plan.id);
+    return true;
+  }
+
   private async startPurchaseFlow(
     telegramId: string,
     chatId: number,
     lang: BotLanguage,
+    planId?: string,
   ) {
     const messages = getBotMessages(lang);
     await this.sessionService.updateSession(telegramId, {
       state: TelegramSessionState.WAITING_EMAIL,
-      data: { language: lang },
+      data: {
+        language: lang,
+        ...(planId ? { planId } : {}),
+      },
     });
     await this.telegramApi.sendMessage(chatId, messages.askEmail);
   }
@@ -552,6 +593,11 @@ export class TelegramUpdateService implements OnModuleInit {
       return;
     }
 
+    const session = await this.sessionService.getSession(telegramId);
+    const sessionData = this.sessionService.getSessionData(
+      session ?? { data: {} },
+    );
+
     await this.sessionService.updateSession(telegramId, {
       state: TelegramSessionState.SELECTING_PLAN,
       data: {
@@ -560,6 +606,16 @@ export class TelegramUpdateService implements OnModuleInit {
         language: lang,
       },
     });
+
+    if (sessionData.planId) {
+      await this.handlePlanSelection(
+        telegramId,
+        chatId,
+        sessionData.planId,
+        lang,
+      );
+      return;
+    }
 
     await this.sendPlanSelection(telegramId, chatId, lang);
   }
@@ -736,15 +792,10 @@ export class TelegramUpdateService implements OnModuleInit {
       return;
     }
 
-    let orderId = data.orderId;
+    const orderId = data.orderId;
     if (!orderId) {
-      const activeOrder =
-        await this.ordersService.getActiveAwaitingPaymentOrder(user.id);
-      if (!activeOrder) {
-        await this.telegramApi.sendMessage(chatId, messages.createOrderFirst);
-        return;
-      }
-      orderId = activeOrder.id;
+      await this.telegramApi.sendMessage(chatId, messages.createOrderFirst);
+      return;
     }
 
     const order = await this.ordersService.findByIdForUser(orderId, user.id);

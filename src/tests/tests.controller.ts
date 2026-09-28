@@ -4,11 +4,13 @@ import {
   Get,
   Param,
   Post,
+  Put,
   Req,
   UseGuards,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthenticatedRequest } from "../auth/types";
+import { SaveTestAttemptDraftDto } from "./dto/save-test-attempt-draft.dto";
 import { SubmitTestAttemptDto } from "./dto/submit-test-attempt.dto";
 import { TestsService } from "./tests.service";
 
@@ -38,6 +40,25 @@ export class TestsController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.testsService.startAttempt(req.user, testId);
+  }
+
+  @Get("test-attempts/:attemptId/draft")
+  @UseGuards(JwtAuthGuard)
+  getAttemptDraft(
+    @Param("attemptId") attemptId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.testsService.getAttemptDraft(req.user, attemptId);
+  }
+
+  @Put("test-attempts/:attemptId/draft")
+  @UseGuards(JwtAuthGuard)
+  saveAttemptDraft(
+    @Param("attemptId") attemptId: string,
+    @Body() dto: SaveTestAttemptDraftDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.testsService.saveAttemptDraft(req.user, attemptId, dto);
   }
 
   @Post("test-attempts/:attemptId/submit")

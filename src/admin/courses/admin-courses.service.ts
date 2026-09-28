@@ -4,8 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "../../generated/prisma/client";
+import { CourseStatus, Prisma } from "../../generated/prisma/client";
 import { clampPagination } from "../../common/constants/pagination";
+import { validateQuestionOptions } from "../../common/validation/question-validation";
 import { PrismaService } from "../../prisma/prisma.service";
 import { StorageCleanupService } from "../../storage/storage-cleanup.service";
 import type {
@@ -116,7 +117,11 @@ export class AdminCoursesService {
       throw new BadRequestException("At least one field must be provided");
     }
 
-    await this.findById(id);
+    const course = await this.findById(id);
+
+    if (dto.status === CourseStatus.PUBLISHED) {
+      this.assertCoursePublishable(course);
+    }
 
     try {
       return await this.prisma.course.update({
@@ -154,6 +159,26 @@ export class AdminCoursesService {
 
     await this.prisma.course.delete({ where: { id } });
     this.storageCleanup.scheduleDelete(objectKeys);
+  }
+
+  private assertCoursePublishable(
+    course: Awaited<ReturnType<AdminCoursesService["findById"]>>,
+  ): void {
+    for (const lesson of course.lessons) {
+      if (!lesson.test) {
+        continue;
+      }
+
+      if (lesson.test.questions.length === 0) {
+        throw new BadRequestException(
+          `Lesson "${lesson.title}" has a test without questions`,
+        );
+      }
+
+      for (const question of lesson.test.questions) {
+        validateQuestionOptions(question.type, question.options);
+      }
+    }
   }
 
   private collectObjectKeys(

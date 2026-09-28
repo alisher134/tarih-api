@@ -52,6 +52,19 @@ describe("TelegramUsersService", () => {
       callback(tx),
     ),
     user: tx.user,
+    courseEnrollment: {
+      findMany: jest.fn().mockResolvedValue([]),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+    lesson: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    userLessonProgress: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    testAttempt: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
 
   beforeEach(async () => {

@@ -102,8 +102,8 @@ async sendEmail(to: string, body: string) {
 
 ```typescript
 // ❌ BAD — different quote/import style than the rest of src/
-import {Module} from '@nestjs/common';
-import {UserService} from "./user.service";
+import { Module } from "@nestjs/common";
+import { UserService } from "./user.service";
 
 // ✅ GOOD — follow prettier.config.mjs and neighboring files
 import { Module } from "@nestjs/common";

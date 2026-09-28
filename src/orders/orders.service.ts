@@ -62,6 +62,17 @@ export class OrdersService {
       throw new NotFoundException(`Subscription plan ${planId} not found`);
     }
 
+    const pendingOrder = await this.getActiveAwaitingPaymentOrder(userId);
+    if (pendingOrder) {
+      this.logger.log({
+        event: "ORDER_REUSED",
+        orderId: pendingOrder.id,
+        orderNumber: pendingOrder.orderNumber,
+        userId,
+      });
+      return pendingOrder;
+    }
+
     const expiresAt = new Date(Date.now() + this.expirationMinutes * 60 * 1000);
 
     let orderNumber = generateOrderNumber();

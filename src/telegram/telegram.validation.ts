@@ -4,6 +4,15 @@ export function isValidEmail(value: string): boolean {
   return EMAIL_REGEX.test(value.trim());
 }
 
+export function parsePlanSlugFromStart(startPayload?: string): string | null {
+  if (!startPayload?.startsWith("plan_")) {
+    return null;
+  }
+
+  const slug = startPayload.slice("plan_".length).trim();
+  return slug.length > 0 ? slug : null;
+}
+
 export function parseFullName(value: string): {
   firstName: string;
   lastName: string;

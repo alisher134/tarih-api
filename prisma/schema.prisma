@@ -425,12 +425,13 @@ model UserLessonProgress {
 model TestAttempt {
   id String @id @default(cuid())
 
-  userId      String
-  testId      String
-  score       Int?
-  passed      Boolean?
-  startedAt   DateTime  @default(now())
-  completedAt DateTime?
+  userId       String
+  testId       String
+  score        Int?
+  passed       Boolean?
+  draftAnswers Json?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
 
   user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   test    LessonTest   @relation(fields: [testId], references: [id], onDelete: Cascade)

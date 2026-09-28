@@ -2,6 +2,7 @@ import {
   inferReceiptExtension,
   isValidEmail,
   parseFullName,
+  parsePlanSlugFromStart,
 } from "./telegram.validation";
 
 describe("telegram.validation", () => {
@@ -16,6 +17,12 @@ describe("telegram.validation", () => {
       lastName: "Иванов",
     });
     expect(parseFullName("Али")).toBeNull();
+  });
+
+  it("parses plan slug from telegram start payload", () => {
+    expect(parsePlanSlugFromStart("plan_1-month")).toBe("1-month");
+    expect(parsePlanSlugFromStart("purchase")).toBeNull();
+    expect(parsePlanSlugFromStart("plan_")).toBeNull();
   });
 
   it("infers receipt extensions", () => {

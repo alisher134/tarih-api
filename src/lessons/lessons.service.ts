@@ -128,7 +128,7 @@ export class LessonsService {
           lessonId,
         },
       },
-      select: { watchedSeconds: true, completed: true },
+      select: { watchedSeconds: true, completed: true, completedAt: true },
     });
 
     const previousWatchedSeconds = previousProgress?.watchedSeconds ?? 0;
@@ -148,6 +148,9 @@ export class LessonsService {
     );
     const completed =
       previousProgress?.completed === true || completedByThreshold;
+    const completedAt = completed
+      ? (previousProgress?.completedAt ?? new Date())
+      : null;
 
     const progress = await this.prisma.userLessonProgress.upsert({
       where: {
@@ -161,12 +164,12 @@ export class LessonsService {
         lessonId,
         watchedSeconds,
         completed,
-        completedAt: completed ? new Date() : null,
+        completedAt,
       },
       update: {
         watchedSeconds,
         completed,
-        completedAt: completed ? new Date() : null,
+        completedAt,
       },
     });
 

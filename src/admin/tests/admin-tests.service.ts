@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "../../generated/prisma/client";
+import { CourseStatus, Prisma } from "../../generated/prisma/client";
+import { recalculateAllCourseEnrollmentsProgress } from "../../common/progress/course-progress";
 import { validateQuestionOptions } from "../../common/validation/question-validation";
 import { PrismaService } from "../../prisma/prisma.service";
 import type {
@@ -22,7 +23,7 @@ export class AdminTestsService {
     await this.ensureLessonExists(lessonId);
 
     try {
-      return await this.prisma.lessonTest.create({
+      const test = await this.prisma.lessonTest.create({
         data: {
           lessonId,
           title: dto.title,
@@ -32,6 +33,10 @@ export class AdminTestsService {
           attemptsLimit: dto.attemptsLimit,
         },
       });
+
+      await this.recalcIfPublishedCourseByLessonId(lessonId);
+
+      return test;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -69,15 +74,18 @@ export class AdminTestsService {
   }
 
   async removeTest(testId: string) {
-    await this.findTest(testId);
+    const test = await this.findTest(testId);
     await this.prisma.lessonTest.delete({ where: { id: testId } });
+    await this.recalcIfPublishedCourseByLessonId(test.lessonId);
   }
 
   async createQuestion(testId: string, dto: CreateQuestionDto) {
     await this.findTest(testId);
     validateQuestionOptions(dto.type, dto.options);
 
-    return this.prisma.question.create({
+    const test = await this.findTest(testId);
+
+    const question = await this.prisma.question.create({
       data: {
         testId,
         text: dto.text,
@@ -96,6 +104,10 @@ export class AdminTestsService {
         options: { orderBy: { order: "asc" } },
       },
     });
+
+    await this.recalcIfPublishedCourseByLessonId(test.lessonId);
+
+    return question;
   }
 
   async updateQuestion(questionId: string, dto: UpdateQuestionDto) {
@@ -141,8 +153,10 @@ export class AdminTestsService {
   }
 
   async removeQuestion(questionId: string) {
-    await this.findQuestion(questionId);
+    const question = await this.findQuestion(questionId);
+    const test = await this.findTest(question.testId);
     await this.prisma.question.delete({ where: { id: questionId } });
+    await this.recalcIfPublishedCourseByLessonId(test.lessonId);
   }
 
   private async ensureLessonExists(lessonId: string) {
@@ -153,6 +167,24 @@ export class AdminTestsService {
     if (!lesson) {
       throw new NotFoundException(`Lesson ${lessonId} not found`);
     }
+  }
+
+  private async recalcIfPublishedCourseByLessonId(
+    lessonId: string,
+  ): Promise<void> {
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: {
+        courseId: true,
+        course: { select: { status: true } },
+      },
+    });
+
+    if (lesson?.course.status !== CourseStatus.PUBLISHED) {
+      return;
+    }
+
+    await recalculateAllCourseEnrollmentsProgress(this.prisma, lesson.courseId);
   }
 
   private async findTest(testId: string) {

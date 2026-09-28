@@ -3,6 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { CourseStatus } from "../../generated/prisma/client";
+import { recalculateAllCourseEnrollmentsProgress } from "../../common/progress/course-progress";
 import { PrismaService } from "../../prisma/prisma.service";
 import { StorageCleanupService } from "../../storage/storage-cleanup.service";
 import { AdminUploadsService } from "../uploads/admin-uploads.service";
@@ -29,7 +31,7 @@ export class AdminLessonsService {
       "video",
     );
 
-    return this.prisma.lesson.create({
+    const lesson = await this.prisma.lesson.create({
       data: {
         courseId,
         title: dto.title,
@@ -39,6 +41,10 @@ export class AdminLessonsService {
         order: dto.order ?? 0,
       },
     });
+
+    await this.recalcIfPublishedCourse(courseId);
+
+    return lesson;
   }
 
   async updateLesson(lessonId: string, userId: string, dto: UpdateLessonDto) {
@@ -97,8 +103,12 @@ export class AdminLessonsService {
       ...lesson.materials.map((material) => material.fileObjectKey),
     ];
 
+    const courseId = lesson.courseId;
+
     await this.prisma.lesson.delete({ where: { id: lessonId } });
     this.storageCleanup.scheduleDelete(objectKeys);
+
+    await this.recalcIfPublishedCourse(courseId);
   }
 
   async createMaterial(
@@ -172,6 +182,19 @@ export class AdminLessonsService {
     const material = await this.findMaterial(materialId);
     await this.prisma.lessonMaterial.delete({ where: { id: materialId } });
     this.storageCleanup.scheduleDelete([material.fileObjectKey]);
+  }
+
+  private async recalcIfPublishedCourse(courseId: string): Promise<void> {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { status: true },
+    });
+
+    if (course?.status !== CourseStatus.PUBLISHED) {
+      return;
+    }
+
+    await recalculateAllCourseEnrollmentsProgress(this.prisma, courseId);
   }
 
   private async ensureCourseExists(courseId: string) {

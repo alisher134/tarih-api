@@ -15,8 +15,8 @@ alwaysApply: false
 
 ```typescript
 // ❌ BAD
-import {Injectable} from '@nestjs/common'
-const x={a:1,b:2}
+import { Injectable } from "@nestjs/common";
+const x = { a: 1, b: 2 };
 
 // ✅ GOOD
 import { Injectable } from "@nestjs/common";

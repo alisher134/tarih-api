@@ -29,7 +29,13 @@ export class TelegramWebhookController {
     @Headers("x-telegram-bot-api-secret-token") secretToken: string | undefined,
     @Body() update: TelegramUpdate,
   ) {
-    if (this.webhookSecret && secretToken !== this.webhookSecret) {
+    if (!this.webhookSecret) {
+      throw new UnauthorizedException(
+        "Telegram webhook secret is not configured",
+      );
+    }
+
+    if (secretToken !== this.webhookSecret) {
       throw new UnauthorizedException("Invalid Telegram webhook secret");
     }
 

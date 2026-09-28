@@ -17,6 +17,7 @@ describe("OrdersService", () => {
     },
     order: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
       updateMany: jest.fn(),
     },
@@ -43,11 +44,29 @@ describe("OrdersService", () => {
     jest.clearAllMocks();
   });
 
+  it("reuses an existing pending order", async () => {
+    prisma.subscriptionPlan.findFirst.mockResolvedValue({
+      id: "plan-1",
+      priceKzt: 5000,
+    });
+    prisma.order.findFirst.mockResolvedValue({
+      id: "order-existing",
+      orderNumber: "ORD-EXIST1",
+      status: OrderStatus.AWAITING_PAYMENT,
+    });
+
+    const order = await service.createOrder("user-1", "plan-1");
+
+    expect(order.id).toBe("order-existing");
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
   it("creates an awaiting payment order", async () => {
     prisma.subscriptionPlan.findFirst.mockResolvedValue({
       id: "plan-1",
       priceKzt: 5000,
     });
+    prisma.order.findFirst.mockResolvedValue(null);
     prisma.order.findUnique.mockResolvedValue(null);
     prisma.order.create.mockResolvedValue({
       id: "order-1",

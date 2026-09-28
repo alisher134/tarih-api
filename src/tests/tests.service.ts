@@ -17,8 +17,18 @@ import { LearningEventsService } from "../learning-events/learning-events.servic
 import { stripCorrectAnswers } from "../common/validation/question-validation";
 import { PrismaService } from "../prisma/prisma.service";
 import type { PublicUser } from "../users/users.service";
+import type { SaveTestAttemptDraftDto } from "./dto/save-test-attempt-draft.dto";
 import type { SubmitTestAttemptDto } from "./dto/submit-test-attempt.dto";
 import { SubscriptionsService } from "../subscriptions/subscriptions.service";
+
+type DraftAnswer = {
+  questionId: string;
+  optionIds: string[];
+};
+
+type AttemptWithTest = NonNullable<
+  Awaited<ReturnType<TestsService["loadOwnedInProgressAttempt"]>>
+>;
 
 @Injectable()
 export class TestsService {
@@ -211,55 +221,40 @@ export class TestsService {
     return attempt;
   }
 
+  async getAttemptDraft(user: PublicUser, attemptId: string) {
+    const attempt = await this.loadOwnedInProgressAttempt(user, attemptId);
+
+    return {
+      answers: this.parseDraftAnswers(attempt.draftAnswers),
+    };
+  }
+
+  async saveAttemptDraft(
+    user: PublicUser,
+    attemptId: string,
+    dto: SaveTestAttemptDraftDto,
+  ) {
+    const attempt = await this.loadOwnedInProgressAttempt(user, attemptId);
+    const answers = this.validateDraftAnswers(
+      attempt.test.questions,
+      dto.answers,
+    );
+
+    await this.prisma.testAttempt.update({
+      where: { id: attemptId },
+      data: { draftAnswers: answers },
+    });
+
+    return { answers };
+  }
+
   async submitAttempt(
     user: PublicUser,
     attemptId: string,
     dto: SubmitTestAttemptDto,
   ) {
-    const attempt = await this.prisma.testAttempt.findUnique({
-      where: { id: attemptId },
-      include: {
-        test: {
-          include: {
-            lesson: {
-              select: {
-                id: true,
-                courseId: true,
-              },
-            },
-            questions: {
-              include: {
-                options: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!attempt || attempt.userId !== user.id) {
-      throw new NotFoundException(`Attempt ${attemptId} not found`);
-    }
-
-    if (attempt.completedAt) {
-      throw new BadRequestException("Attempt already submitted");
-    }
-
-    await this.courseAccess.assertCourseContentAccess(
-      user,
-      attempt.test.lesson.courseId,
-    );
+    const attempt = await this.loadOwnedInProgressAttempt(user, attemptId);
     await this.assertLessonCompletedForTest(user.id, attempt.test.lesson.id);
-
-    if (
-      attempt.test.timeLimit != null &&
-      this.isAttemptExpired(attempt.startedAt, attempt.test.timeLimit)
-    ) {
-      throw new BadRequestApiException(
-        API_ERROR_CODE.TEST_TIME_LIMIT_EXCEEDED,
-        "Test time limit exceeded",
-      );
-    }
 
     const questionMap = new Map(
       attempt.test.questions.map((question) => [question.id, question]),
@@ -342,6 +337,7 @@ export class TestsService {
           score,
           passed,
           completedAt: new Date(),
+          draftAnswers: Prisma.DbNull,
         },
       });
 
@@ -412,6 +408,129 @@ export class TestsService {
     );
 
     return result;
+  }
+
+  private async loadOwnedInProgressAttempt(
+    user: PublicUser,
+    attemptId: string,
+  ) {
+    const attempt = await this.prisma.testAttempt.findUnique({
+      where: { id: attemptId },
+      include: {
+        test: {
+          include: {
+            lesson: {
+              select: {
+                id: true,
+                courseId: true,
+              },
+            },
+            questions: {
+              include: {
+                options: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!attempt || attempt.userId !== user.id) {
+      throw new NotFoundException(`Attempt ${attemptId} not found`);
+    }
+
+    if (attempt.completedAt) {
+      throw new BadRequestException("Attempt already submitted");
+    }
+
+    await this.courseAccess.assertCourseContentAccess(
+      user,
+      attempt.test.lesson.courseId,
+    );
+
+    if (
+      attempt.test.timeLimit != null &&
+      this.isAttemptExpired(attempt.startedAt, attempt.test.timeLimit)
+    ) {
+      throw new BadRequestApiException(
+        API_ERROR_CODE.TEST_TIME_LIMIT_EXCEEDED,
+        "Test time limit exceeded",
+      );
+    }
+
+    return attempt;
+  }
+
+  private parseDraftAnswers(draftAnswers: unknown): DraftAnswer[] {
+    if (!Array.isArray(draftAnswers)) {
+      return [];
+    }
+
+    return draftAnswers.filter((item): item is DraftAnswer =>
+      this.isDraftAnswerItem(item),
+    );
+  }
+
+  private isDraftAnswerItem(item: unknown): item is DraftAnswer {
+    if (typeof item !== "object" || item == null) {
+      return false;
+    }
+
+    const record = item as Record<string, unknown>;
+    const optionIds = record.optionIds;
+
+    return (
+      typeof record.questionId === "string" &&
+      Array.isArray(optionIds) &&
+      optionIds.every((optionId) => typeof optionId === "string")
+    );
+  }
+
+  private validateDraftAnswers(
+    questions: AttemptWithTest["test"]["questions"],
+    answers: DraftAnswer[],
+  ): DraftAnswer[] {
+    const questionMap = new Map(
+      questions.map((question) => [question.id, question]),
+    );
+    const seenQuestionIds = new Set<string>();
+    const validated: DraftAnswer[] = [];
+
+    for (const answer of answers) {
+      if (seenQuestionIds.has(answer.questionId)) {
+        throw new BadRequestException(
+          `Duplicate answer for question ${answer.questionId}`,
+        );
+      }
+      seenQuestionIds.add(answer.questionId);
+
+      const question = questionMap.get(answer.questionId);
+      if (!question) {
+        throw new BadRequestException(`Unknown question ${answer.questionId}`);
+      }
+
+      const optionIds = new Set(answer.optionIds);
+      const questionOptionIds = new Set(question.options.map((o) => o.id));
+
+      for (const optionId of optionIds) {
+        if (!questionOptionIds.has(optionId)) {
+          throw new BadRequestException(
+            `Option ${optionId} does not belong to question ${question.id}`,
+          );
+        }
+      }
+
+      if (optionIds.size > 0) {
+        this.validateAnswerShape(question.type, optionIds.size);
+      }
+
+      validated.push({
+        questionId: answer.questionId,
+        optionIds: [...optionIds],
+      });
+    }
+
+    return validated;
   }
 
   private async assertLessonCompletedForTest(
