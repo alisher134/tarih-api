@@ -1,0 +1,490 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CourseEnrollmentStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum LessonMaterialType {
+  PDF
+  DOCUMENT
+  PRESENTATION
+  ARCHIVE
+  FILE
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+}
+
+model User {
+  id String @id @default(cuid())
+
+  email        String  @unique
+  firstName    String  @default("")
+  lastName     String  @default("")
+  passwordHash String
+  telegramId   String? @unique
+  isAdmin      Boolean @default(false)
+  tokenVersion Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  enrollments          CourseEnrollment[]
+  favorites            CourseFavorite[]
+  lessonProgress       UserLessonProgress[]
+  testAttempts         TestAttempt[]
+  uploadIntents        UploadIntent[]
+  subscriptions        UserSubscription[]
+  grantedSubscriptions UserSubscription[] @relation("GrantedSubscriptions")
+  learningEvents       LearningEvent[]
+  orders               Order[]
+  telegramSessions     TelegramSession[]
+  passwordResetTokens  PasswordResetToken[]
+
+  @@index([email])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum UserSubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model SubscriptionPlan {
+  id String @id @default(cuid())
+
+  slug           String  @unique
+  title          String
+  description    String  @default("")
+  durationMonths Int
+  priceKzt       Int
+  order          Int     @default(0)
+  isActive       Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions UserSubscription[]
+  orders        Order[]
+
+  @@index([isActive, order])
+}
+
+model UserSubscription {
+  id String @id @default(cuid())
+
+  userId      String
+  planId      String
+  orderId     String?                @unique
+  status      UserSubscriptionStatus @default(ACTIVE)
+  startsAt    DateTime               @default(now())
+  expiresAt   DateTime
+  grantedById String?
+  cancelledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  order     Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  grantedBy User?            @relation("GrantedSubscriptions", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+enum OrderStatus {
+  PENDING_CONFIRMATION
+  AWAITING_PAYMENT
+  PAYMENT_REVIEW
+  PAID
+  REJECTED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  UNDER_REVIEW
+  CONFIRMED
+  REJECTED
+}
+
+enum TelegramSessionState {
+  START
+  WAITING_EMAIL
+  WAITING_NAME
+  SELECTING_PLAN
+  CONFIRMING_DATA
+  AWAITING_PAYMENT
+  WAITING_RECEIPT
+  PAYMENT_REVIEW
+  COMPLETED
+}
+
+model Order {
+  id String @id @default(cuid())
+
+  orderNumber     String      @unique
+  userId          String
+  planId          String
+  amount          Int
+  status          OrderStatus @default(PENDING_CONFIRMATION)
+  expiresAt       DateTime?
+  paidAt          DateTime?
+  rejectedAt      DateTime?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan         SubscriptionPlan  @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payment      Payment?
+  subscription UserSubscription?
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model Payment {
+  id String @id @default(cuid())
+
+  orderId               String        @unique
+  receiptTelegramFileId String?
+  receiptObjectKey      String?
+  status                PaymentStatus @default(PENDING)
+  confirmedBy           String?
+  confirmedAt           DateTime?
+  rejectionReason       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model TelegramSession {
+  id String @id @default(cuid())
+
+  telegramId String               @unique
+  userId     String?
+  state      TelegramSessionState @default(START)
+  data       Json                 @default("{}")
+  expiresAt  DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+}
+
+enum UploadPurpose {
+  VIDEO
+  MATERIAL
+}
+
+enum UploadIntentStatus {
+  PENDING
+  CONFIRMED
+  EXPIRED
+}
+
+model UploadIntent {
+  id String @id @default(cuid())
+
+  userId     String
+  purpose    UploadPurpose
+  objectKey  String
+  fileName   String
+  contentType String
+  fileSize   Int
+  courseId   String?
+  lessonId   String?
+  status     UploadIntentStatus @default(PENDING)
+  expiresAt  DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expiresAt])
+  @@index([objectKey])
+}
+
+model Course {
+  id String @id @default(cuid())
+
+  title       String
+  description String       @default("")
+  slug        String       @unique
+  status      CourseStatus @default(DRAFT)
+  order       Int          @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lessons     Lesson[]
+  enrollments    CourseEnrollment[]
+  favorites      CourseFavorite[]
+  learningEvents LearningEvent[]
+
+  @@index([status, order])
+}
+
+enum LearningEventType {
+  COURSE_STARTED
+  LESSON_PROGRESS
+  LESSON_COMPLETED
+  TEST_STARTED
+  TEST_SUBMITTED
+}
+
+model Lesson {
+  id String @id @default(cuid())
+
+  courseId      String
+  title         String
+  description   String  @default("")
+  videoObjectKey String
+  videoDuration Int
+  order         Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course    Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  materials LessonMaterial[]
+  test      LessonTest?
+  progress  UserLessonProgress[]
+
+  @@index([courseId, order])
+}
+
+model LessonMaterial {
+  id String @id @default(cuid())
+
+  lessonId String
+  title    String
+  type           LessonMaterialType
+  fileObjectKey  String
+  fileName String
+  fileSize Int
+  order    Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId, order])
+}
+
+model LessonTest {
+  id String @id @default(cuid())
+
+  lessonId      String @unique
+  title         String
+  description   String @default("")
+  passingScore  Int
+  timeLimit     Int?
+  attemptsLimit Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lesson    Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions Question[]
+  attempts  TestAttempt[]
+}
+
+model Question {
+  id String @id @default(cuid())
+
+  testId String
+  text   String
+  type   QuestionType
+  points Int @default(1)
+  order  Int @default(0)
+
+  test    LessonTest       @relation(fields: [testId], references: [id], onDelete: Cascade)
+  options QuestionOption[]
+  answers TestAnswer[]
+
+  @@index([testId, order])
+}
+
+model QuestionOption {
+  id String @id @default(cuid())
+
+  questionId String
+  text       String
+  isCorrect  Boolean @default(false)
+  order      Int     @default(0)
+
+  question Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers  TestAnswerOption[]
+
+  @@index([questionId, order])
+}
+
+model CourseEnrollment {
+  id String @id @default(cuid())
+
+  userId      String
+  courseId    String
+  enrolledAt     DateTime               @default(now())
+  lastActivityAt DateTime               @default(now())
+  completedAt    DateTime?
+  progress       Int                    @default(0)
+  status         CourseEnrollmentStatus @default(ACTIVE)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId, status])
+  @@index([courseId, status])
+  @@index([lastActivityAt])
+}
+
+model CourseFavorite {
+  id String @id @default(cuid())
+
+  userId   String
+  courseId String
+
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+}
+
+model UserLessonProgress {
+  id String @id @default(cuid())
+
+  userId         String
+  lessonId       String
+  watchedSeconds Int       @default(0)
+  completed      Boolean   @default(false)
+  completedAt    DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([lessonId, completed])
+}
+
+model TestAttempt {
+  id String @id @default(cuid())
+
+  userId       String
+  testId       String
+  score        Int?
+  passed       Boolean?
+  draftAnswers Json?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  test    LessonTest   @relation(fields: [testId], references: [id], onDelete: Cascade)
+  answers TestAnswer[]
+
+  @@index([userId, testId])
+  @@index([testId, completedAt])
+}
+
+model LearningEvent {
+  id String @id @default(cuid())
+
+  userId              String
+  courseId            String
+  lessonId            String?
+  testId              String?
+  type                LearningEventType
+  watchedDeltaSeconds Int               @default(0)
+  score               Int?
+  passed              Boolean?
+  createdAt           DateTime          @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([courseId, createdAt])
+  @@index([type, createdAt])
+}
+
+model TestAnswer {
+  id String @id @default(cuid())
+
+  attemptId  String
+  questionId String
+  isCorrect  Boolean
+
+  attempt        TestAttempt        @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question       Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOptions TestAnswerOption[]
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+model TestAnswerOption {
+  id String @id @default(cuid())
+
+  answerId String
+  optionId String
+
+  answer TestAnswer     @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  option QuestionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([answerId, optionId])
+}
