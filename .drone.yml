@@ -1,0 +1,39 @@
+kind: pipeline
+type: docker
+name: deploy-api
+
+steps:
+  # Шаг 1: Сборка и отправка Docker-образа в GitHub Container Registry
+  - name: build-and-push
+    image: plugins/docker
+    settings:
+      registry: ghcr.io
+      # ЗАМЕНИТЕ alisher134 на ваш реальный логин на GitHub (строчными буквами)
+      repo: ghcr.io/alisher134/tarih-api
+      tags: latest
+      username: alisher134 # Замените на логин
+      password:
+        from_secret: GH_PACKAGES_TOKEN # Секрет, который мы создадим в GitHub
+      dockerfile: Dockerfile
+
+  # Шаг 2: Запуск готового образа на сервере
+  - name: deploy-to-server
+    image: appleboy/drone-ssh
+    settings:
+      host: 89.126.200.145
+      username: root # Замените, если используете другого пользователя
+      key:
+        from_secret: SSH_KEY
+      script:
+        - cd /root/tarih/tarih-api # Замените на реальный путь
+        # Скачиваем ТОЛЬКО обновленный образ (без клонирования кода)
+        - docker-compose -f docker-compose.prod.yml pull api
+        # Перезапускаем контейнер
+        - docker-compose -f docker-compose.prod.yml up -d api
+        - echo "Tarih API успешно задеплоен по Варианту 2!"
+
+trigger:
+  branch:
+    - main
+  event:
+    - push

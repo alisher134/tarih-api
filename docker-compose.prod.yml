@@ -1,9 +1,6 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: tarih-api:latest
+    image: ghcr.io/alisher134/tarih-api:latest
     container_name: tarih-api
     restart: unless-stopped
     ports:
