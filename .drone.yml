@@ -23,6 +23,7 @@ steps:
         from_secret: SSH_KEY
       script:
         - cd /root/tarih/tarih-api
+        - git pull origin main
         - docker compose -f docker-compose.prod.yml pull api
         - docker compose -f docker-compose.prod.yml up -d api
 
