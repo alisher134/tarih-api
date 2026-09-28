@@ -28,6 +28,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build application to dist/
+RUN npx prisma generate
 RUN npm run build
 
 # Prune development dependencies
