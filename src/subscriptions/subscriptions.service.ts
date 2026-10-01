@@ -14,7 +14,8 @@ const SUBSCRIPTION_INCLUDE = {
     select: {
       id: true,
       slug: true,
-      title: true,
+      titleRu: true,
+      titleKz: true,
       durationMonths: true,
       priceKzt: true,
       order: true,
@@ -48,7 +49,8 @@ export class SubscriptionsService {
       select: {
         id: true,
         slug: true,
-        title: true,
+        titleRu: true,
+        titleKz: true,
         description: true,
         durationMonths: true,
         priceKzt: true,
@@ -86,7 +88,8 @@ export class SubscriptionsService {
       select: {
         id: true,
         slug: true,
-        title: true,
+        titleRu: true,
+        titleKz: true,
         durationMonths: true,
         priceKzt: true,
       },
@@ -99,7 +102,8 @@ export class SubscriptionsService {
       select: {
         id: true,
         slug: true,
-        title: true,
+        titleRu: true,
+        titleKz: true,
         durationMonths: true,
         priceKzt: true,
       },
@@ -168,7 +172,8 @@ export class SubscriptionsService {
       plan: {
         id: string;
         slug: string;
-        title: string;
+        titleRu: string;
+        titleKz: string;
         durationMonths: number;
         priceKzt: number;
         order: number;

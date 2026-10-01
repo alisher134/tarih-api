@@ -379,7 +379,7 @@ export class TelegramUpdateService implements OnModuleInit {
           order.user.telegramId,
           userMessages.paymentConfirmed({
             orderNumber: order.orderNumber,
-            planTitle: order.plan.title,
+            planTitle: order.plan.titleRu,
             expiresAt,
           }),
         );
@@ -639,7 +639,7 @@ export class TelegramUpdateService implements OnModuleInit {
     });
 
     const lines = plans.map(
-      (plan) => `${plan.title} · ${formatPriceKzt(plan.priceKzt)}`,
+      (plan) => `${plan.titleRu} · ${formatPriceKzt(plan.priceKzt)}`,
     );
 
     await this.telegramApi.sendMessage(
@@ -648,7 +648,7 @@ export class TelegramUpdateService implements OnModuleInit {
       {
         inline_keyboard: plans.map((plan) => [
           {
-            text: `${plan.title} — ${formatPriceKzt(plan.priceKzt)}`,
+            text: `${plan.titleRu} — ${formatPriceKzt(plan.priceKzt)}`,
             callback_data: `plan:${plan.id}`,
           },
         ]),
@@ -685,7 +685,7 @@ export class TelegramUpdateService implements OnModuleInit {
         firstName: data.firstName ?? "",
         lastName: data.lastName ?? "",
         email: data.email ?? "",
-        planTitle: plan.title,
+        planTitle: plan.titleRu,
         durationMonths: plan.durationMonths,
         priceKzt: plan.priceKzt,
       }),
@@ -758,7 +758,7 @@ export class TelegramUpdateService implements OnModuleInit {
     await this.telegramApi.sendMessage(
       chatId,
       messages.paymentDetails({
-        planTitle: order.plan.title,
+        planTitle: order.plan.titleRu,
         amount: order.amount,
         cardNumber: this.paymentCardNumber,
         cardOwner: this.paymentCardOwner,
@@ -887,7 +887,7 @@ export class TelegramUpdateService implements OnModuleInit {
     order: {
       orderNumber: string;
       amount: number;
-      plan: { title: string; durationMonths: number };
+      plan: { titleRu: string; durationMonths: number };
       user: {
         firstName: string;
         lastName: string;
@@ -913,7 +913,7 @@ export class TelegramUpdateService implements OnModuleInit {
       userName: `${order.user.firstName} ${order.user.lastName}`,
       email: order.user.email,
       telegramId: order.user.telegramId,
-      planTitle: order.plan.title,
+      planTitle: order.plan.titleRu,
       durationMonths: order.plan.durationMonths,
       amount: order.amount,
     });
@@ -1016,7 +1016,7 @@ export class TelegramUpdateService implements OnModuleInit {
     await this.telegramApi.sendMessage(
       chatId,
       messages.mySubscription({
-        planTitle: current.subscription.plan.title,
+        planTitle: current.subscription.plan.titleRu,
         isActive: current.isActive,
         expiresAt: current.subscription.expiresAt,
       }),
@@ -1044,7 +1044,7 @@ export class TelegramUpdateService implements OnModuleInit {
     const lines = orders.slice(0, 10).map((order) =>
       messages.myOrderLine({
         orderNumber: order.orderNumber,
-        planTitle: order.plan.title,
+        planTitle: order.plan.titleRu,
         status: order.status,
       }),
     );

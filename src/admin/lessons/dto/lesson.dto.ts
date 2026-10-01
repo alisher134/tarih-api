@@ -27,17 +27,19 @@ export class CreateLessonDto {
   @MaxLength(5000)
   description?: string;
 
+  @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
     typeof value === "string" ? value.trim() : value,
   )
   @IsString()
   @MinLength(1)
-  videoObjectKey: string;
+  videoObjectKey?: string;
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  videoDuration: number;
+  videoDuration?: number;
 
   @IsOptional()
   @Type(() => Number)

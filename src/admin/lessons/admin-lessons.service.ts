@@ -25,11 +25,13 @@ export class AdminLessonsService {
 
   async createLesson(courseId: string, userId: string, dto: CreateLessonDto) {
     await this.ensureCourseExists(courseId);
-    await this.adminUploadsService.assertConfirmedIntent(
-      userId,
-      dto.videoObjectKey,
-      "video",
-    );
+    if (dto.videoObjectKey) {
+      await this.adminUploadsService.assertConfirmedIntent(
+        userId,
+        dto.videoObjectKey,
+        "video",
+      );
+    }
 
     const lesson = await this.prisma.lesson.create({
       data: {
@@ -101,7 +103,7 @@ export class AdminLessonsService {
     const objectKeys = [
       lesson.videoObjectKey,
       ...lesson.materials.map((material) => material.fileObjectKey),
-    ];
+    ].filter((key): key is string => key !== null);
 
     const courseId = lesson.courseId;
 

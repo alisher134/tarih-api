@@ -187,7 +187,7 @@ export class AdminCoursesService {
     const keys: string[] = [];
 
     for (const lesson of course.lessons) {
-      keys.push(lesson.videoObjectKey);
+      if (lesson.videoObjectKey) keys.push(lesson.videoObjectKey);
       for (const material of lesson.materials) {
         keys.push(material.fileObjectKey);
       }

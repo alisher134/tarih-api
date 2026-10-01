@@ -21,7 +21,7 @@ const ORDER_INCLUDE = {
     select: {
       id: true,
       slug: true,
-      title: true,
+      titleRu: true,
       description: true,
       durationMonths: true,
       priceKzt: true,

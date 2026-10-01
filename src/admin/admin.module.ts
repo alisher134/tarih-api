@@ -18,6 +18,9 @@ import { AdminUploadsService } from "./uploads/admin-uploads.service";
 import { AdminUsersController } from "./users/admin-users.controller";
 import { AdminUsersService } from "./users/admin-users.service";
 
+import { AdminSubscriptionPlansController } from "./subscription-plans/admin-subscription-plans.controller";
+import { AdminSubscriptionPlansService } from "./subscription-plans/admin-subscription-plans.service";
+
 @Module({
   imports: [PrismaModule, AuthModule, SubscriptionsModule],
   controllers: [
@@ -28,6 +31,7 @@ import { AdminUsersService } from "./users/admin-users.service";
     AdminUploadsController,
     AdminSubscriptionsController,
     AdminAnalyticsController,
+    AdminSubscriptionPlansController,
   ],
   providers: [
     AdminUsersService,
@@ -37,6 +41,7 @@ import { AdminUsersService } from "./users/admin-users.service";
     AdminUploadsService,
     AdminSubscriptionsService,
     AdminAnalyticsService,
+    AdminSubscriptionPlansService,
     AdminGuard,
   ],
 })

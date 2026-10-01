@@ -45,6 +45,10 @@ export class LessonsService {
       throw new NotFoundException(`Lesson ${lessonId} not found`);
     }
 
+    if (!lesson.videoObjectKey) {
+      throw new NotFoundException(`Lesson ${lessonId} has no video`);
+    }
+
     const presigned = await this.storage.createPresignedDownload(
       lesson.videoObjectKey,
     );
@@ -132,20 +136,24 @@ export class LessonsService {
     });
 
     const previousWatchedSeconds = previousProgress?.watchedSeconds ?? 0;
-    const watchedSeconds = Math.min(
-      Math.max(dto.watchedSeconds, previousWatchedSeconds),
-      lesson.videoDuration,
-    );
+    const watchedSeconds = lesson.videoDuration
+      ? Math.min(
+          Math.max(dto.watchedSeconds, previousWatchedSeconds),
+          lesson.videoDuration,
+        )
+      : Math.max(dto.watchedSeconds, previousWatchedSeconds);
     const watchedDeltaSeconds = Math.max(
       0,
       watchedSeconds - previousWatchedSeconds,
     );
 
-    const completedByThreshold = isLessonCompletedByWatch(
-      watchedSeconds,
-      lesson.videoDuration,
-      this.completionThresholdPercent,
-    );
+    const completedByThreshold = lesson.videoDuration
+      ? isLessonCompletedByWatch(
+          watchedSeconds,
+          lesson.videoDuration,
+          this.completionThresholdPercent,
+        )
+      : false;
     const completed =
       previousProgress?.completed === true || completedByThreshold;
     const completedAt = completed

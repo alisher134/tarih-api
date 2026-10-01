@@ -480,7 +480,7 @@ export class AdminAnalyticsService {
 
     const plans = await this.prisma.subscriptionPlan.findMany({
       where: { id: { in: byPlan.map((item) => item.planId) } },
-      select: { id: true, slug: true, title: true },
+      select: { id: true, slug: true, titleRu: true, titleKz: true },
     });
     const planMap = new Map(plans.map((plan) => [plan.id, plan]));
 

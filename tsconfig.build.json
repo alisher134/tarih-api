@@ -6,6 +6,8 @@
     "dist",
     "**/*spec.ts",
     "prisma.config.ts",
-    "prisma"
+    "prisma",
+    "seed_plans.ts",
+    "fix_plans.ts"
   ]
 }

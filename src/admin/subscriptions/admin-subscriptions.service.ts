@@ -55,7 +55,8 @@ export class AdminSubscriptionsService {
             select: {
               id: true,
               slug: true,
-              title: true,
+              titleRu: true,
+              titleKz: true,
               durationMonths: true,
               priceKzt: true,
               order: true,
@@ -83,7 +84,8 @@ export class AdminSubscriptionsService {
           select: {
             id: true,
             slug: true,
-            title: true,
+            titleRu: true,
+            titleKz: true,
             durationMonths: true,
             priceKzt: true,
             order: true,
@@ -106,7 +108,8 @@ export class AdminSubscriptionsService {
           select: {
             id: true,
             slug: true,
-            title: true,
+            titleRu: true,
+            titleKz: true,
             durationMonths: true,
             priceKzt: true,
             order: true,

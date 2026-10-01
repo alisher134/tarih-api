@@ -2,7 +2,7 @@ export type LessonWithTest = {
   id: string;
   title: string;
   order: number;
-  videoDuration: number;
+  videoDuration: number | null;
   test: { id: string } | null;
 };
 
@@ -20,7 +20,7 @@ export type ResolvedLearningState = {
     id: string;
     title: string;
     order: number;
-    videoDuration: number;
+    videoDuration: number | null;
     watchedSeconds: number;
     completed: boolean;
   };

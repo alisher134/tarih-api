@@ -19,7 +19,7 @@ const ORDER_INCLUDE = {
   plan: {
     select: {
       id: true,
-      title: true,
+      titleRu: true,
       durationMonths: true,
       priceKzt: true,
     },
@@ -39,7 +39,7 @@ const ORDER_INCLUDE = {
       plan: {
         select: {
           id: true,
-          title: true,
+          titleRu: true,
           durationMonths: true,
           priceKzt: true,
         },
@@ -335,7 +335,7 @@ export class PaymentsService {
         plan: {
           select: {
             id: true,
-            title: true,
+            titleRu: true,
             durationMonths: true,
             priceKzt: true,
           },
@@ -375,7 +375,7 @@ export class PaymentsService {
         plan: {
           select: {
             id: true,
-            title: true,
+            titleRu: true,
             durationMonths: true,
             priceKzt: true,
           },
