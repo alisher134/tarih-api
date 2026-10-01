@@ -126,6 +126,9 @@ export class TestsService {
 
     const { attempt, createdNew } = await this.prisma.$transaction(
       async (tx) => {
+        // Lock user row to prevent race conditions during test attempt creation
+        await tx.$executeRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`;
+
         if (test.attemptsLimit != null) {
           const attemptsCount = await tx.testAttempt.count({
             where: {
@@ -162,6 +165,7 @@ export class TestsService {
                 completedAt: new Date(),
                 score: 0,
                 passed: false,
+                draftAnswers: Prisma.DbNull,
               },
             });
 
@@ -252,6 +256,7 @@ export class TestsService {
           completedAt: new Date(),
           score: 0,
           passed: false,
+          draftAnswers: Prisma.DbNull,
         },
       });
 
@@ -348,15 +353,13 @@ export class TestsService {
         question.options.filter((option) => option.isCorrect).map((o) => o.id),
       );
 
-      const isCorrect = this.isAnswerCorrect(
+      const { isCorrect, pointsEarnedFraction } = this.evaluateAnswer(
         question.type,
         optionIds,
         correctOptionIds,
       );
 
-      if (isCorrect) {
-        earnedPoints += question.points;
-      }
+      earnedPoints += question.points * pointsEarnedFraction;
 
       answerCreates.push({
         questionId: question.id,
@@ -495,6 +498,16 @@ export class TestsService {
       attempt.test.timeLimit != null &&
       this.isAttemptExpired(attempt.startedAt, attempt.test.timeLimit)
     ) {
+      await this.prisma.testAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          completedAt: new Date(),
+          score: 0,
+          passed: false,
+          draftAnswers: Prisma.DbNull,
+        },
+      });
+
       throw new BadRequestApiException(
         API_ERROR_CODE.TEST_TIME_LIMIT_EXCEEDED,
         "Test time limit exceeded",
@@ -631,7 +644,8 @@ export class TestsService {
 
   private isAttemptExpired(startedAt: Date, timeLimitSeconds: number): boolean {
     const elapsedSeconds = (Date.now() - startedAt.getTime()) / 1000;
-    return elapsedSeconds > timeLimitSeconds;
+    // Add 10 seconds grace period for network latency
+    return elapsedSeconds > timeLimitSeconds + 10;
   }
 
   private validateAnswerShape(type: QuestionType, selectedCount: number) {
@@ -654,21 +668,41 @@ export class TestsService {
     }
   }
 
-  private isAnswerCorrect(
+  private evaluateAnswer(
     type: QuestionType,
     selectedOptionIds: Set<string>,
     correctOptionIds: Set<string>,
-  ): boolean {
+  ): { isCorrect: boolean; pointsEarnedFraction: number } {
+    if (type === QuestionType.MULTIPLE_CHOICE) {
+      let correctSelected = 0;
+      let wrongSelected = 0;
+
+      for (const optionId of selectedOptionIds) {
+        if (correctOptionIds.has(optionId)) {
+          correctSelected++;
+        } else {
+          wrongSelected++;
+        }
+      }
+
+      const fraction = Math.max(
+        0,
+        (correctSelected - wrongSelected) / correctOptionIds.size,
+      );
+
+      return { isCorrect: fraction === 1, pointsEarnedFraction: fraction };
+    }
+
     if (selectedOptionIds.size !== correctOptionIds.size) {
-      return false;
+      return { isCorrect: false, pointsEarnedFraction: 0 };
     }
 
     for (const optionId of selectedOptionIds) {
       if (!correctOptionIds.has(optionId)) {
-        return false;
+        return { isCorrect: false, pointsEarnedFraction: 0 };
       }
     }
 
-    return true;
+    return { isCorrect: true, pointsEarnedFraction: 1 };
   }
 }
