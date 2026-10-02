@@ -15,6 +15,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tarih}:${POSTGRES_PASSWORD:-tarih}@postgres:5432/${POSTGRES_DB:-tarih}?schema=public
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://minio.tarih-edu.kz}
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,6 +68,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_API_CORS_ALLOW_ORIGIN: ${CORS_ORIGIN:-*}
+      MINIO_SERVER_URL: ${MINIO_SERVER_URL:-http://minio.tarih-edu.kz}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-http://minio.tarih-edu.kz/minio/ui}
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"

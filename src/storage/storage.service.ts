@@ -21,6 +21,7 @@ import {
 export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
   private readonly client: Minio.Client;
+  private readonly presignClient: Minio.Client;
   private readonly bucket: string;
   private readonly uploadTtlSeconds: number;
   private readonly downloadTtlSeconds: number;
@@ -48,17 +49,46 @@ export class StorageService implements OnModuleInit {
       1024 *
       1024;
 
+    const accessKey =
+      config.get<string>("MINIO_ACCESS_KEY") ??
+      config.getOrThrow<string>("MINIO_ROOT_USER");
+    const secretKey =
+      config.get<string>("MINIO_SECRET_KEY") ??
+      config.getOrThrow<string>("MINIO_ROOT_PASSWORD");
+
     this.client = new Minio.Client({
       endPoint: endpoint,
       port,
       useSSL,
-      accessKey:
-        config.get<string>("MINIO_ACCESS_KEY") ??
-        config.getOrThrow<string>("MINIO_ROOT_USER"),
-      secretKey:
-        config.get<string>("MINIO_SECRET_KEY") ??
-        config.getOrThrow<string>("MINIO_ROOT_PASSWORD"),
+      accessKey,
+      secretKey,
     });
+
+    const publicUrlString = config.get<string>("MINIO_PUBLIC_URL");
+    if (publicUrlString) {
+      try {
+        const parsed = new URL(publicUrlString);
+        const isHttps = parsed.protocol === "https:";
+        const defaultPort = isHttps ? 443 : 80;
+        const publicPort = parsed.port ? Number(parsed.port) : defaultPort;
+
+        this.presignClient = new Minio.Client({
+          endPoint: parsed.hostname,
+          port: publicPort,
+          useSSL: isHttps,
+          accessKey,
+          secretKey,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Failed to parse MINIO_PUBLIC_URL: ${publicUrlString}`,
+          error,
+        );
+        this.presignClient = this.client;
+      }
+    } else {
+      this.presignClient = this.client;
+    }
   }
 
   async onModuleInit() {
@@ -111,7 +141,7 @@ export class StorageService implements OnModuleInit {
       courseId,
       lessonId,
     );
-    const uploadUrl = await this.client.presignedPutObject(
+    const uploadUrl = await this.presignClient.presignedPutObject(
       this.bucket,
       objectKey,
       this.uploadTtlSeconds,
@@ -127,7 +157,7 @@ export class StorageService implements OnModuleInit {
   async createPresignedDownload(
     objectKey: string,
   ): Promise<PresignedDownloadResult> {
-    const downloadUrl = await this.client.presignedGetObject(
+    const downloadUrl = await this.presignClient.presignedGetObject(
       this.bucket,
       objectKey,
       this.downloadTtlSeconds,
