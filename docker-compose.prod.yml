@@ -16,6 +16,7 @@ services:
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://minio.tarih-edu.kz}
+      SKIP_SEED: "true"
     depends_on:
       postgres:
         condition: service_healthy
