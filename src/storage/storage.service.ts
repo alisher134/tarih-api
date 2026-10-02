@@ -56,12 +56,15 @@ export class StorageService implements OnModuleInit {
       config.get<string>("MINIO_SECRET_KEY") ??
       config.getOrThrow<string>("MINIO_ROOT_PASSWORD");
 
+    const region = config.get<string>("MINIO_REGION") ?? "us-east-1";
+
     this.client = new Minio.Client({
       endPoint: endpoint,
       port,
       useSSL,
       accessKey,
       secretKey,
+      region,
     });
 
     const publicUrlString = config.get<string>("MINIO_PUBLIC_URL");
@@ -78,6 +81,7 @@ export class StorageService implements OnModuleInit {
           useSSL: isHttps,
           accessKey,
           secretKey,
+          region,
         });
       } catch (error) {
         this.logger.error(
