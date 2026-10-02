@@ -58,6 +58,7 @@ model User {
   orders               Order[]
   telegramSessions     TelegramSession[]
   passwordResetTokens  PasswordResetToken[]
+  practiceSessions     PracticeSession[]
 
   @@index([email])
 }
@@ -488,4 +489,21 @@ model TestAnswerOption {
   option QuestionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
 
   @@unique([answerId, optionId])
+}
+
+model PracticeSession {
+  id               String   @id @default(cuid())
+  userId           String
+  title            String   @default("")
+  testIds          String[]
+  totalQuestions   Int
+  correctAnswers   Int      @default(0)
+  score            Int      @default(0)
+  timeSpentSeconds Int      @default(0)
+  details          Json?
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

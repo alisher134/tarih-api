@@ -53,6 +53,7 @@ export class CourseAccessService {
       select: {
         id: true,
         courseId: true,
+        order: true,
         course: {
           select: { status: true },
         },
@@ -71,14 +72,62 @@ export class CourseAccessService {
       throw new NotFoundException(`Lesson ${lessonId} not found`);
     }
 
-    if (await this.subscriptionsService.hasActiveSubscription(user.id)) {
-      return { lessonId: lesson.id, courseId: lesson.courseId };
+    if (!(await this.subscriptionsService.hasActiveSubscription(user.id))) {
+      throw new ForbiddenApiException(
+        API_ERROR_CODE.ACTIVE_SUBSCRIPTION_REQUIRED,
+        "Active subscription required",
+      );
     }
 
-    throw new ForbiddenApiException(
-      API_ERROR_CODE.ACTIVE_SUBSCRIPTION_REQUIRED,
-      "Active subscription required",
-    );
+    const previousLessons = await this.prisma.lesson.findMany({
+      where: { courseId: lesson.courseId, order: { lt: lesson.order } },
+      select: { id: true, test: { select: { id: true } } },
+    });
+
+    if (previousLessons.length > 0) {
+      const lessonIds = previousLessons.map((l) => l.id);
+      const testIds = previousLessons
+        .map((l) => l.test?.id)
+        .filter((id): id is string => Boolean(id));
+
+      const progressRows = await this.prisma.userLessonProgress.findMany({
+        where: { userId: user.id, lessonId: { in: lessonIds } },
+        select: { lessonId: true, completed: true },
+      });
+      const completedMap = new Map(
+        progressRows.map((r) => [r.lessonId, r.completed]),
+      );
+
+      let passedTestIds = new Set<string>();
+      if (testIds.length > 0) {
+        const attempts = await this.prisma.testAttempt.findMany({
+          where: {
+            userId: user.id,
+            testId: { in: testIds },
+            passed: true,
+            completedAt: { not: null },
+          },
+          select: { testId: true },
+        });
+        passedTestIds = new Set(attempts.map((a) => a.testId));
+      }
+
+      for (const prev of previousLessons) {
+        const isVideoCompleted = completedMap.get(prev.id) === true;
+        const isTestCompleted = prev.test
+          ? passedTestIds.has(prev.test.id)
+          : true;
+
+        if (!isVideoCompleted || !isTestCompleted) {
+          throw new ForbiddenApiException(
+            API_ERROR_CODE.LESSON_NOT_COMPLETED,
+            "Previous lesson must be completed",
+          );
+        }
+      }
+    }
+
+    return { lessonId: lesson.id, courseId: lesson.courseId };
   }
 
   async assertMaterialDownloadAccess(

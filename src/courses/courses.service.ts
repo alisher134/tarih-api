@@ -100,20 +100,73 @@ export class CoursesService {
       throw new NotFoundException(`Course ${slug} not found`);
     }
 
+    let progressMap: Map<string, { completed: boolean }> = new Map();
+    let passedTestIds: Set<string> = new Set();
+
+    if (user) {
+      const lessonIds = course.lessons.map((l) => l.id);
+      const testIds = course.lessons
+        .map((l) => l.test?.id)
+        .filter((id): id is string => Boolean(id));
+
+      if (lessonIds.length > 0) {
+        const progressRows = await this.prisma.userLessonProgress.findMany({
+          where: { userId: user.id, lessonId: { in: lessonIds } },
+          select: { lessonId: true, completed: true },
+        });
+        progressMap = new Map(
+          progressRows.map((row) => [
+            row.lessonId,
+            { completed: row.completed },
+          ]),
+        );
+      }
+
+      if (testIds.length > 0) {
+        const passedAttempts = await this.prisma.testAttempt.findMany({
+          where: {
+            userId: user.id,
+            testId: { in: testIds },
+            passed: true,
+            completedAt: { not: null },
+          },
+          select: { testId: true },
+        });
+        passedTestIds = new Set(passedAttempts.map((a) => a.testId));
+      }
+    }
+
+    let nextUnlocked = true;
+
     return {
       ...course,
-      lessons: course.lessons.map((lesson) => ({
-        id: lesson.id,
-        title: lesson.title,
-        description: lesson.description,
-        videoDuration: lesson.videoDuration,
-        order: lesson.order,
-        createdAt: lesson.createdAt,
-        updatedAt: lesson.updatedAt,
-        hasMaterials: lesson._count.materials > 0,
-        hasTest: lesson.test != null,
-        testId: lesson.test?.id ?? null,
-      })),
+      lessons: course.lessons.map((lesson) => {
+        const isLocked = !nextUnlocked;
+
+        const p = progressMap.get(lesson.id);
+        const lessonCompleted = p?.completed ?? false;
+        const testCompleted = lesson.test
+          ? passedTestIds.has(lesson.test.id)
+          : true;
+        const isCompleted = lessonCompleted && testCompleted;
+
+        nextUnlocked = nextUnlocked && isCompleted;
+
+        return {
+          id: lesson.id,
+          title: lesson.title,
+          description: lesson.description,
+          videoDuration: lesson.videoDuration,
+          order: lesson.order,
+          createdAt: lesson.createdAt,
+          updatedAt: lesson.updatedAt,
+          hasMaterials: lesson._count.materials > 0,
+          hasTest: lesson.test != null,
+          testId: lesson.test?.id ?? null,
+          isLocked,
+          isCompleted,
+        };
+      }),
     };
   }
 

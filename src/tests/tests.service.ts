@@ -90,8 +90,18 @@ export class TestsService {
     );
     await this.assertLessonCompletedForTest(user.id, test.lesson.id);
 
+    const latestAttempt = await this.prisma.testAttempt.findFirst({
+      where: {
+        userId: user.id,
+        testId,
+        completedAt: { not: null },
+      },
+      orderBy: { completedAt: "desc" },
+    });
+
     return {
       ...test,
+      latestAttempt,
       questions: test.questions.map((question) => ({
         ...question,
         options: stripCorrectAnswers(question.options),
@@ -128,6 +138,21 @@ export class TestsService {
       async (tx) => {
         // Lock user row to prevent race conditions during test attempt creation
         await tx.$executeRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`;
+
+        const completedAttempt = await tx.testAttempt.findFirst({
+          where: {
+            userId: user.id,
+            testId,
+            completedAt: { not: null },
+          },
+        });
+
+        if (completedAttempt) {
+          throw new ForbiddenApiException(
+            API_ERROR_CODE.TEST_ALREADY_COMPLETED,
+            "Test already completed",
+          );
+        }
 
         if (test.attemptsLimit != null) {
           const attemptsCount = await tx.testAttempt.count({

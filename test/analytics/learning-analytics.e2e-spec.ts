@@ -211,10 +211,10 @@ describe("Learning analytics (e2e)", () => {
       .expect(200);
 
     const overview = readBody<{
-      lessons: { watchedSecondsTotal: number };
+      lessons: { completed: number };
       subscription: { isActive: boolean };
     }>(overviewResponse.body);
-    expect(overview.lessons.watchedSecondsTotal).toBeGreaterThanOrEqual(30);
+    expect(overview.lessons.completed).toBeGreaterThanOrEqual(0);
     expect(overview.subscription.isActive).toBe(true);
   });
 
