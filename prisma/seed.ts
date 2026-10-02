@@ -274,6 +274,198 @@ async function seedAdmin(prisma: PrismaClient) {
   return admin;
 }
 
+const defaultPlans = [
+  {
+    slug: "standard-1m",
+    titleRu: "Базовый",
+    titleKz: "Базалық",
+    description: "Толық курс пен барлық сабақтарға 1 айға қолжетімділік",
+    durationMonths: 1,
+    priceKzt: 4990,
+    order: 0,
+    isActive: true,
+  },
+  {
+    slug: "standard-3m",
+    titleRu: "Стандарт",
+    titleKz: "Стандартты",
+    description:
+      "Барлық материалдар, тесттер және аналитикаға 3 айға қолжетімділік",
+    durationMonths: 3,
+    priceKzt: 12990,
+    order: 1,
+    isActive: true,
+  },
+  {
+    slug: "premium-1y",
+    titleRu: "Премиум",
+    titleKz: "Премиум",
+    description: "Платформаға шектеусіз 1 жылдық толық қолжетімділік",
+    durationMonths: 12,
+    priceKzt: 39990,
+    order: 2,
+    isActive: true,
+  },
+];
+
+async function seedSubscriptionPlans(prisma: PrismaClient) {
+  console.log("==> Seeding subscription plans...");
+  for (const plan of defaultPlans) {
+    await prisma.subscriptionPlan.upsert({
+      where: { slug: plan.slug },
+      update: {
+        titleRu: plan.titleRu,
+        titleKz: plan.titleKz,
+        description: plan.description,
+        durationMonths: plan.durationMonths,
+        priceKzt: plan.priceKzt,
+        order: plan.order,
+        isActive: plan.isActive,
+      },
+      create: plan,
+    });
+  }
+  console.log(`==> Seeded ${defaultPlans.length} subscription plans.`);
+}
+
+async function seedCourses(
+  prisma: PrismaClient,
+  adminUser?: { id: string; email: string },
+) {
+  const hasVideo = existsSync(VIDEO_PATH);
+  const hasPdf = existsSync(PDF_PATH);
+  let uploadedVideoKey: string | null = null;
+  let uploadedPdfKey: string | null = null;
+  let pdfSize = 0;
+
+  if (hasVideo && hasPdf) {
+    try {
+      const bucket = process.env.MINIO_BUCKET ?? "tarih-storage";
+      const minioClient = new Minio.Client({
+        endPoint: process.env.MINIO_ENDPOINT ?? "localhost",
+        port: Number(process.env.MINIO_PORT ?? "9000"),
+        useSSL: process.env.MINIO_USE_SSL === "true",
+        accessKey: process.env.MINIO_ROOT_USER ?? "minioadmin",
+        secretKey: process.env.MINIO_ROOT_PASSWORD ?? "minioadmin",
+      });
+
+      const bucketExists = await minioClient.bucketExists(bucket);
+      if (!bucketExists) {
+        await minioClient.makeBucket(bucket);
+        console.log(`Created bucket: ${bucket}`);
+      }
+
+      await uploadFile(
+        minioClient,
+        bucket,
+        VIDEO_OBJECT_KEY,
+        VIDEO_PATH,
+        "video/mp4",
+      );
+      await uploadFile(
+        minioClient,
+        bucket,
+        PDF_OBJECT_KEY,
+        PDF_PATH,
+        "application/pdf",
+      );
+      uploadedVideoKey = VIDEO_OBJECT_KEY;
+      uploadedPdfKey = PDF_OBJECT_KEY;
+      pdfSize = statSync(PDF_PATH).size;
+    } catch (err) {
+      console.warn("==> MinIO demo media upload skipped:", err);
+    }
+  } else {
+    console.log(
+      "==> Mock media files not found on disk, creating courses without mock video/pdf files.",
+    );
+  }
+
+  await prisma.course.deleteMany({
+    where: { slug: { in: courses.map((course) => course.slug) } },
+  });
+
+  for (let courseIndex = 0; courseIndex < courses.length; courseIndex++) {
+    const courseData = courses[courseIndex];
+    const course = await prisma.course.create({
+      data: {
+        title: courseData.title,
+        slug: courseData.slug,
+        description: courseData.description,
+        status: CourseStatus.PUBLISHED,
+        order: courseIndex,
+        lessons: {
+          create: courseData.lessons.map((lessonTitle, lessonIndex) => ({
+            title: lessonTitle,
+            description: `«${courseData.title}» курсының «${lessonTitle}» сабағы.`,
+            videoObjectKey: uploadedVideoKey,
+            videoDuration: uploadedVideoKey ? VIDEO_DURATION_SECONDS : null,
+            order: lessonIndex,
+            materials: uploadedPdfKey
+              ? {
+                  create: [
+                    {
+                      title: "Презентация",
+                      type: LessonMaterialType.PRESENTATION,
+                      fileObjectKey: uploadedPdfKey,
+                      fileName: "Rakhmanov-Alisher-Frontend.pdf",
+                      fileSize: pdfSize,
+                      order: 0,
+                    },
+                  ],
+                }
+              : undefined,
+            test: {
+              create: buildLessonTest(lessonTitle, courseData.title),
+            },
+          })),
+        },
+      },
+      include: {
+        lessons: {
+          include: {
+            materials: true,
+            test: { include: { questions: true } },
+          },
+        },
+      },
+    });
+
+    const testsCount = course.lessons.filter((lesson) => lesson.test).length;
+    console.log(
+      `Created course "${course.title}" with ${course.lessons.length} lessons and ${testsCount} tests`,
+    );
+  }
+
+  console.log(
+    "Seed completed: 10 courses with lessons, tests and optional materials.",
+  );
+
+  if (adminUser) {
+    const seededCourses = await prisma.course.findMany({
+      where: { slug: { in: courses.map((course) => course.slug) } },
+      select: { id: true },
+    });
+
+    for (const course of seededCourses) {
+      await prisma.courseEnrollment.upsert({
+        where: {
+          userId_courseId: {
+            userId: adminUser.id,
+            courseId: course.id,
+          },
+        },
+        create: { userId: adminUser.id, courseId: course.id },
+        update: {},
+      });
+    }
+
+    console.log(
+      `Re-enrolled ${adminUser.email} in ${seededCourses.length} courses`,
+    );
+  }
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -285,147 +477,15 @@ async function main() {
   });
 
   try {
-    const isProduction =
-      process.env.NODE_ENV === "production" ||
-      process.env.APP_ENV === "production" ||
-      process.env.SEED_ONLY_ADMIN === "true";
-
-    if (isProduction) {
-      console.log(
-        "==> [PROD] Running in production mode: seeding ONLY admin user...",
-      );
-      await seedAdmin(prisma);
-      console.log("==> [PROD] Admin seed finished successfully.");
-      return;
-    }
-
-    // In development mode:
-    console.log("==> [DEV] Running in development mode.");
     const adminUser = await seedAdmin(prisma);
+    await seedSubscriptionPlans(prisma);
 
-    const hasVideo = existsSync(VIDEO_PATH);
-    const hasPdf = existsSync(PDF_PATH);
-
-    if (!hasVideo || !hasPdf) {
-      console.warn(
-        `==> [DEV] Mock media files not found (video: ${hasVideo}, pdf: ${hasPdf}). Skipping course demo media seed.`,
-      );
+    if (process.env.SEED_ONLY_ADMIN === "true") {
+      console.log("==> SEED_ONLY_ADMIN=true, skipping course seed.");
       return;
     }
 
-    const bucket = process.env.MINIO_BUCKET ?? "tarih-storage";
-    const minioClient = new Minio.Client({
-      endPoint: process.env.MINIO_ENDPOINT ?? "localhost",
-      port: Number(process.env.MINIO_PORT ?? "9000"),
-      useSSL: process.env.MINIO_USE_SSL === "true",
-      accessKey: process.env.MINIO_ROOT_USER ?? "minioadmin",
-      secretKey: process.env.MINIO_ROOT_PASSWORD ?? "minioadmin",
-    });
-
-    const bucketExists = await minioClient.bucketExists(bucket);
-    if (!bucketExists) {
-      await minioClient.makeBucket(bucket);
-      console.log(`Created bucket: ${bucket}`);
-    }
-
-    await uploadFile(
-      minioClient,
-      bucket,
-      VIDEO_OBJECT_KEY,
-      VIDEO_PATH,
-      "video/mp4",
-    );
-    await uploadFile(
-      minioClient,
-      bucket,
-      PDF_OBJECT_KEY,
-      PDF_PATH,
-      "application/pdf",
-    );
-
-    const pdfSize = statSync(PDF_PATH).size;
-
-    await prisma.course.deleteMany({
-      where: { slug: { in: courses.map((course) => course.slug) } },
-    });
-
-    for (let courseIndex = 0; courseIndex < courses.length; courseIndex++) {
-      const courseData = courses[courseIndex];
-      const course = await prisma.course.create({
-        data: {
-          title: courseData.title,
-          slug: courseData.slug,
-          description: courseData.description,
-          status: CourseStatus.PUBLISHED,
-          order: courseIndex,
-          lessons: {
-            create: courseData.lessons.map((lessonTitle, lessonIndex) => ({
-              title: lessonTitle,
-              description: `«${courseData.title}» курсының «${lessonTitle}» сабағы.`,
-              videoObjectKey: VIDEO_OBJECT_KEY,
-              videoDuration: VIDEO_DURATION_SECONDS,
-              order: lessonIndex,
-              materials: {
-                create: [
-                  {
-                    title: "Презентация",
-                    type: LessonMaterialType.PRESENTATION,
-                    fileObjectKey: PDF_OBJECT_KEY,
-                    fileName: "Rakhmanov-Alisher-Frontend.pdf",
-                    fileSize: pdfSize,
-                    order: 0,
-                  },
-                ],
-              },
-              test: {
-                create: buildLessonTest(lessonTitle, courseData.title),
-              },
-            })),
-          },
-        },
-        include: {
-          lessons: {
-            include: {
-              materials: true,
-              test: { include: { questions: true } },
-            },
-          },
-        },
-      });
-
-      const testsCount = course.lessons.filter((lesson) => lesson.test).length;
-      console.log(
-        `Created course "${course.title}" with ${course.lessons.length} lessons and ${testsCount} tests`,
-      );
-    }
-
-    console.log(
-      "Seed completed: 10 courses with lessons, videos, materials and tests.",
-    );
-
-    if (adminUser) {
-      const seededCourses = await prisma.course.findMany({
-        where: { slug: { in: courses.map((course) => course.slug) } },
-        select: { id: true },
-      });
-
-      for (const course of seededCourses) {
-        await prisma.courseEnrollment.upsert({
-          where: {
-            userId_courseId: {
-              userId: adminUser.id,
-              courseId: course.id,
-            },
-          },
-          create: { userId: adminUser.id, courseId: course.id },
-          update: {},
-        });
-      }
-
-      console.log(
-        `Re-enrolled ${adminUser.email} in ${seededCourses.length} courses`,
-      );
-    }
+    await seedCourses(prisma, adminUser);
   } finally {
     await prisma.$disconnect();
   }

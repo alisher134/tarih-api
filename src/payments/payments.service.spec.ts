@@ -222,10 +222,16 @@ describe("PaymentsService", () => {
       const localTx = {
         payment: { update: jest.fn().mockResolvedValue(undefined) },
         order: {
+          findUnique: jest.fn(),
           update: jest.fn().mockResolvedValue({
             id: "order-1",
             status: OrderStatus.REJECTED,
           }),
+        },
+        userSubscription: {
+          findUnique: jest.fn(),
+          findFirst: jest.fn(),
+          create: jest.fn(),
         },
       };
       return Promise.resolve(callback(localTx));
