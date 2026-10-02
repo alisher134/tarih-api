@@ -27,6 +27,8 @@ COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nestjs:nodejs /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nestjs:nodejs /app/tsconfig.json ./tsconfig.json
+COPY --from=builder --chown=nestjs:nodejs /app/Big_Buck_Bunny_1080_10s_5MB.mp4 ./Big_Buck_Bunny_1080_10s_5MB.mp4
+COPY --from=builder --chown=nestjs:nodejs /app/Rakhmanov-Alisher-Frontend.pdf ./Rakhmanov-Alisher-Frontend.pdf
 COPY --chown=nestjs:nodejs docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 USER nestjs
