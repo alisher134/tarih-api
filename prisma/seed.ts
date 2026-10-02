@@ -503,12 +503,11 @@ async function seedCourses(
 }
 
 async function main() {
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.FORCE_SEED !== "true"
-  ) {
-    console.log("==> Seeding is disabled in production environment.");
-    return;
+  if (process.env.NODE_ENV === "production") {
+    console.error(
+      "ERROR: Database seeding is completely disabled and forbidden in production!",
+    );
+    process.exit(1);
   }
 
   const connectionString = process.env.DATABASE_URL;
