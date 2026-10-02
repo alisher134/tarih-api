@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { DrmController } from './drm.controller';
+import { Module } from "@nestjs/common";
+import { DrmController } from "./drm.controller";
 
 @Module({
-  controllers: [DrmController]
+  controllers: [DrmController],
 })
 export class DrmModule {}

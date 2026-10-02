@@ -7,9 +7,6 @@
     "**/*spec.ts",
     "prisma.config.ts",
     "prisma",
-    "seed_plans.ts",
-    "fix_plans.ts",
-    "create_admin.ts",
     "*.ts"
   ]
 }

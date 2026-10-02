@@ -36,6 +36,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "db:seed": "prisma db seed",
+    "db:seed:admin": "npx tsx prisma/create_admin.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -62,7 +63,8 @@
     "pg": "^8.23.0",
     "prisma": "^7.10.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "tsx": "^4.23.13"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
@@ -92,7 +94,6 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "tsx": "^4.23.13",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },

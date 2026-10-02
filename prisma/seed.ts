@@ -1,7 +1,8 @@
 import "dotenv/config";
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
+import * as argon2 from "argon2";
 import * as Minio from "minio";
 import {
   CourseStatus,
@@ -10,123 +11,171 @@ import {
   QuestionType,
 } from "../src/generated/prisma/client";
 
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "zharbol.rakhmanoff@mail.ru")
+  .trim()
+  .toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "zharbol.rakhmanoff1991";
+const ADMIN_FIRST_NAME = process.env.ADMIN_FIRST_NAME ?? "Zharbol";
+const ADMIN_LAST_NAME = process.env.ADMIN_LAST_NAME ?? "Rakhmanov";
+
 const VIDEO_PATH =
   process.env.SEED_VIDEO_PATH ??
-  `${process.env.HOME}/Downloads/file_example_MP4_1920_18MG.mp4`;
+  `${process.env.HOME}/Downloads/Big_Buck_Bunny_1080_10s_5MB.mp4`;
 const PDF_PATH =
   process.env.SEED_PDF_PATH ??
-  `${process.env.HOME}/Downloads/Рахманов Алишер Алматбекович.pdf`;
+  `${process.env.HOME}/Downloads/Rakhmanov-Alisher-Frontend.pdf`;
 
-const VIDEO_OBJECT_KEY = "seed/shared/video/file_example_MP4_1920_18MG.mp4";
-const PDF_OBJECT_KEY =
-  "seed/shared/materials/rahmanov-alisher-almatbekovich.pdf";
-const VIDEO_DURATION_SECONDS = 30;
+const VIDEO_OBJECT_KEY = "seed/shared/video/Big_Buck_Bunny_1080_10s_5MB.mp4";
+const PDF_OBJECT_KEY = "seed/shared/materials/Rakhmanov-Alisher-Frontend.pdf";
+const VIDEO_DURATION_SECONDS = 10;
 
-const courses = [
+type SeedCourse = {
+  title: string;
+  slug: string;
+  description: string;
+  lessons: string[];
+};
+
+const courses: SeedCourse[] = [
   {
-    title: "Древний Казахстан",
+    title: "Ежелгі Қазақстан",
     slug: "ancient-kazakhstan",
     description:
-      "Первые цивилизации, скифы и саки на территории современного Казахстана.",
+      "Қазақстан аумағындағы алғашқы өркениеттер, скифтер мен сақтар тарихы.",
     lessons: [
-      "Введение в древнюю историю",
-      "Скифская культура",
-      "Андроновская культура",
+      "Ежелгі тарихқа кіріспе",
+      "Скифтер мәдениеті",
+      "Андрон мәдениеті",
     ],
   },
   {
-    title: "Великий шёлковый путь",
+    title: "Ұлы Жібек жолы",
     slug: "silk-road-history",
     description:
-      "Торговые маршруты, города-оазисы и культурный обмен между Востоком и Западом.",
-    lessons: ["Что такое шёлковый путь", "Города на маршруте", "Наследие пути"],
+      "Сауда жолдары, оазис қалалары және Шығыс пен Батыс арасындағы мәдени байланыс.",
+    lessons: [
+      "Жібек жолының мәні",
+      "Жол бойындағы көне қалалар",
+      "Ұлы Жібек жолының мұрасы",
+    ],
   },
   {
-    title: "Казахское ханство",
+    title: "Қазақ хандығы",
     slug: "kazakh-khanate",
     description:
-      "Формирование казахского ханства, объединение жузов и политическая история.",
-    lessons: ["Образование ханства", "Три жуза", "Внутренние процессы"],
+      "Қазақ хандығының құрылуы, жүздердің бірігуі және саяси тарихы.",
+    lessons: [
+      "Хандықтың құрылуы",
+      "Үш жүздің тарихы",
+      "Хандықтағы ішкі үдерістер",
+    ],
   },
   {
-    title: "Казахстан в составе Российской империи",
+    title: "Қазақстан Ресей империясының құрамында",
     slug: "kazakhstan-russian-empire",
     description:
-      "Присоединение, административные реформы и социальные изменения XIX века.",
-    lessons: ["Присоединение", "Реформы XIX века", "Восстания и протесты"],
+      "Қосылу кезеңі, XIX ғасырдағы әкімшілік реформалар мен әлеуметтік өзгерістер.",
+    lessons: [
+      "Ресей құрамына қосылу",
+      "XIX ғасырдағы реформалар",
+      "Ұлт-азаттық көтерілістер",
+    ],
   },
   {
-    title: "Советский период",
+    title: "Кеңестік кезеңдегі Қазақстан",
     slug: "soviet-kazakhstan",
     description:
-      "Индустриализация, коллективизация и формирование советской республики.",
-    lessons: ["Казахская АССР", "Индустриализация", "Культура советского времени"],
+      "Индустрияландыру, ұжымдастыру және кеңестік республиканың қалыптасуы.",
+    lessons: [
+      "Қазақ АКСР кезеңі",
+      "Индустрияландыру жылдары",
+      "Кеңес дәуірінің мәдениеті",
+    ],
   },
   {
-    title: "Независимость Казахстана",
+    title: "Тәуелсіз Қазақстан",
     slug: "kazakhstan-independence",
     description:
-      "Путь к суверенитету, принятие Конституции и становление современного государства.",
-    lessons: ["1991 год", "Конституция", "Первые годы независимости"],
+      "Егемендікке қол жеткізу, Конституцияның қабылдануы және заманауи мемлекеттің құрылуы.",
+    lessons: [
+      "1991 жыл және Тәуелсіздік",
+      "Ата Заңның қабылдануы",
+      "Тәуелсіздіктің алғашқы жылдары",
+    ],
   },
   {
-    title: "Вторая мировая война в Центральной Азии",
+    title: "Орталық Азиядағы Екінші дүниежүзілік соғыс",
     slug: "ww2-central-asia",
     description:
-      "Тыл, эвакуация, вклад региона в победу и послевоенное восстановление.",
-    lessons: ["Мобилизация", "Тыловой вклад", "После войны"],
+      "Тылдағы еңбек, эвакуация, жеңіске қосқан үлес және соғыстан кейінгі қайта құру.",
+    lessons: [
+      "Майданға жұмылдыру",
+      "Тылдағы жанқиярлық еңбек",
+      "Соғыстан кейінгі жылдар",
+    ],
   },
   {
-    title: "Кочевая культура",
+    title: "Көшпелілер мәдениеті",
     slug: "nomadic-culture",
     description:
-      "Быт, традиции, экономика и социальная организация кочевого общества.",
-    lessons: ["Кочевое хозяйство", "Байга и традиции", "Юрта и быт"],
+      "Көшпелі қоғамның тұрмыс-тіршілігі, салт-дәстүрлері, экономикасы мен әлеуметтік құрылымы.",
+    lessons: [
+      "Көшпелі шаруашылық",
+      "Ұлттық салт-дәстүрлер",
+      "Киіз үй және көшпелі тұрмыс",
+    ],
   },
   {
-    title: "Средневековая Центральная Азия",
+    title: "Ортағасырлық Орталық Азия",
     slug: "medieval-central-asia",
     description:
-      "Государства и культурные центры Средневековья на территории региона.",
-    lessons: ["Караханидский период", "Наука и образование", "Архитектура"],
+      "Аймақ аумағындағы ортағасырлық мемлекеттер және мәдени-ғылыми орталықтар.",
+    lessons: [
+      "Қарахан мемлекеті",
+      "Ғылым мен ағарту ісі",
+      "Ортағасырлық сәулет өнері",
+    ],
   },
   {
-    title: "Современный Казахстан",
+    title: "Заманауи Қазақстан",
     slug: "modern-kazakhstan",
-    description:
-      "Политика, экономика и общество Казахстана в XXI веке.",
-    lessons: ["Государственное устройство", "Экономика", "Общество сегодня"],
+    description: "XXI ғасырдағы Қазақстанның саясаты, экономикасы мен қоғамы.",
+    lessons: [
+      "Мемлекеттік құрылым",
+      "Экономикалық даму",
+      "Бүгінгі күндегі қоғам",
+    ],
   },
 ] as const;
 
 function buildLessonTest(lessonTitle: string, courseTitle: string) {
   return {
-    title: `Тест: ${lessonTitle}`,
-    description: `Проверка знаний по уроку «${lessonTitle}» (${courseTitle}).`,
+    title: `«${lessonTitle}» тақырыбы бойынша тест`,
+    description: `«${courseTitle}» курсының «${lessonTitle}» сабағы бойынша білімді тексеру тесті.`,
     passingScore: 70,
     timeLimit: 600,
     attemptsLimit: 3,
     questions: {
       create: [
         {
-          text: `Какой теме посвящён урок «${lessonTitle}»?`,
+          text: `«${lessonTitle}» сабағы қай тақырыпқа арналған?`,
           type: QuestionType.SINGLE_CHOICE,
           points: 1,
           order: 0,
           options: {
             create: [
               {
-                text: courseTitle,
+                text: `${courseTitle} («дұрыс жауап»)`,
                 isCorrect: true,
                 order: 0,
               },
               {
-                text: "Современная кулинария Европы",
+                text: "Еуропаның заманауи аспаздығы",
                 isCorrect: false,
                 order: 1,
               },
               {
-                text: "Космическая программа NASA",
+                text: "NASA ғарыш бағдарламасы",
                 isCorrect: false,
                 order: 2,
               },
@@ -134,29 +183,29 @@ function buildLessonTest(lessonTitle: string, courseTitle: string) {
           },
         },
         {
-          text: `Какие утверждения верны для урока «${lessonTitle}»?`,
+          text: `«${lessonTitle}» сабағына қатысты қандай тұжырымдар дұрыс?`,
           type: QuestionType.MULTIPLE_CHOICE,
           points: 2,
           order: 1,
           options: {
             create: [
               {
-                text: "Урок входит в программу курса",
+                text: "Сабақ оқу бағдарламасының құрамына кіреді («дұрыс жауап»)",
                 isCorrect: true,
                 order: 0,
               },
               {
-                text: "Материалы урока доступны после просмотра видео",
+                text: "Сабақ материалдары бейнежазбаны көрген соң қолжетімді («дұрыс жауап»)",
                 isCorrect: true,
                 order: 1,
               },
               {
-                text: "Урок не связан с темой курса",
+                text: "Сабақ курс тақырыбына мүлдем байланысты емес",
                 isCorrect: false,
                 order: 2,
               },
               {
-                text: "Тест необязателен для завершения курса",
+                text: "Курсты аяқтау үшін бұл тестті тапсыру қажет емес",
                 isCorrect: false,
                 order: 3,
               },
@@ -164,14 +213,14 @@ function buildLessonTest(lessonTitle: string, courseTitle: string) {
           },
         },
         {
-          text: `Урок «${lessonTitle}» относится к курсу «${courseTitle}».`,
+          text: `«${lessonTitle}» сабағы «${courseTitle}» курсына жатады.`,
           type: QuestionType.TRUE_FALSE,
           points: 1,
           order: 2,
           options: {
             create: [
-              { text: "Верно", isCorrect: true, order: 0 },
-              { text: "Неверно", isCorrect: false, order: 1 },
+              { text: "Ақиқат («дұрыс жауап»)", isCorrect: true, order: 0 },
+              { text: "Жалған", isCorrect: false, order: 1 },
             ],
           },
         },
@@ -198,26 +247,81 @@ async function uploadFile(
   console.log(`Uploaded ${basename(filePath)} -> ${objectKey}`);
 }
 
+async function seedAdmin(prisma: PrismaClient) {
+  console.log(`==> Seeding admin user: ${ADMIN_EMAIL}...`);
+  const passwordHash = await argon2.hash(ADMIN_PASSWORD);
+
+  const admin = await prisma.user.upsert({
+    where: { email: ADMIN_EMAIL },
+    update: {
+      passwordHash,
+      isAdmin: true,
+      firstName: ADMIN_FIRST_NAME,
+      lastName: ADMIN_LAST_NAME,
+    },
+    create: {
+      email: ADMIN_EMAIL,
+      passwordHash,
+      firstName: ADMIN_FIRST_NAME,
+      lastName: ADMIN_LAST_NAME,
+      isAdmin: true,
+    },
+  });
+
+  console.log(
+    `==> Admin user ensured: ${admin.email} (isAdmin: ${admin.isAdmin}, id: ${admin.id})`,
+  );
+  return admin;
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL is required");
   }
 
-  const bucket = process.env.MINIO_BUCKET ?? "tarih-storage";
-  const minioClient = new Minio.Client({
-    endPoint: process.env.MINIO_ENDPOINT ?? "localhost",
-    port: Number(process.env.MINIO_PORT ?? "9000"),
-    useSSL: process.env.MINIO_USE_SSL === "true",
-    accessKey: process.env.MINIO_ROOT_USER ?? "minioadmin",
-    secretKey: process.env.MINIO_ROOT_PASSWORD ?? "minioadmin",
-  });
-
   const prisma = new PrismaClient({
     adapter: new PrismaPg({ connectionString }),
   });
 
   try {
+    const isProduction =
+      process.env.NODE_ENV === "production" ||
+      process.env.APP_ENV === "production" ||
+      process.env.SEED_ONLY_ADMIN === "true";
+
+    if (isProduction) {
+      console.log(
+        "==> [PROD] Running in production mode: seeding ONLY admin user...",
+      );
+      await seedAdmin(prisma);
+      console.log("==> [PROD] Admin seed finished successfully.");
+      return;
+    }
+
+    // In development mode:
+    console.log("==> [DEV] Running in development mode.");
+    const adminUser = await seedAdmin(prisma);
+
+    const hasVideo = existsSync(VIDEO_PATH);
+    const hasPdf = existsSync(PDF_PATH);
+
+    if (!hasVideo || !hasPdf) {
+      console.warn(
+        `==> [DEV] Mock media files not found (video: ${hasVideo}, pdf: ${hasPdf}). Skipping course demo media seed.`,
+      );
+      return;
+    }
+
+    const bucket = process.env.MINIO_BUCKET ?? "tarih-storage";
+    const minioClient = new Minio.Client({
+      endPoint: process.env.MINIO_ENDPOINT ?? "localhost",
+      port: Number(process.env.MINIO_PORT ?? "9000"),
+      useSSL: process.env.MINIO_USE_SSL === "true",
+      accessKey: process.env.MINIO_ROOT_USER ?? "minioadmin",
+      secretKey: process.env.MINIO_ROOT_PASSWORD ?? "minioadmin",
+    });
+
     const bucketExists = await minioClient.bucketExists(bucket);
     if (!bucketExists) {
       await minioClient.makeBucket(bucket);
@@ -245,7 +349,8 @@ async function main() {
       where: { slug: { in: courses.map((course) => course.slug) } },
     });
 
-    for (const [courseIndex, courseData] of courses.entries()) {
+    for (let courseIndex = 0; courseIndex < courses.length; courseIndex++) {
+      const courseData = courses[courseIndex];
       const course = await prisma.course.create({
         data: {
           title: courseData.title,
@@ -256,17 +361,17 @@ async function main() {
           lessons: {
             create: courseData.lessons.map((lessonTitle, lessonIndex) => ({
               title: lessonTitle,
-              description: `Урок «${lessonTitle}» курса «${courseData.title}».`,
+              description: `«${courseData.title}» курсының «${lessonTitle}» сабағы.`,
               videoObjectKey: VIDEO_OBJECT_KEY,
               videoDuration: VIDEO_DURATION_SECONDS,
               order: lessonIndex,
               materials: {
                 create: [
                   {
-                    title: "Конспект к уроку",
-                    type: LessonMaterialType.PDF,
+                    title: "Презентация",
+                    type: LessonMaterialType.PRESENTATION,
                     fileObjectKey: PDF_OBJECT_KEY,
-                    fileName: "Рахманов Алишер Алматбекович.pdf",
+                    fileName: "Rakhmanov-Alisher-Frontend.pdf",
                     fileSize: pdfSize,
                     order: 0,
                   },
@@ -280,7 +385,10 @@ async function main() {
         },
         include: {
           lessons: {
-            include: { materials: true, test: { include: { questions: true } } },
+            include: {
+              materials: true,
+              test: { include: { questions: true } },
+            },
           },
         },
       });
@@ -294,10 +402,6 @@ async function main() {
     console.log(
       "Seed completed: 10 courses with lessons, videos, materials and tests.",
     );
-
-    const adminUser = await prisma.user.findUnique({
-      where: { email: "admin@gmail.com" },
-    });
 
     if (adminUser) {
       const seededCourses = await prisma.course.findMany({
@@ -319,7 +423,7 @@ async function main() {
       }
 
       console.log(
-        `Re-enrolled admin@gmail.com in ${seededCourses.length} courses`,
+        `Re-enrolled ${adminUser.email} in ${seededCourses.length} courses`,
       );
     }
   } finally {
