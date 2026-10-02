@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { createReadStream, existsSync, statSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, resolve } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import * as argon2 from "argon2";
 import * as Minio from "minio";
@@ -18,12 +18,45 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "zharbol.rakhmanoff1991";
 const ADMIN_FIRST_NAME = process.env.ADMIN_FIRST_NAME ?? "Zharbol";
 const ADMIN_LAST_NAME = process.env.ADMIN_LAST_NAME ?? "Rakhmanov";
 
-const VIDEO_PATH =
-  process.env.SEED_VIDEO_PATH ??
-  `${process.env.HOME}/Downloads/Big_Buck_Bunny_1080_10s_5MB.mp4`;
-const PDF_PATH =
-  process.env.SEED_PDF_PATH ??
-  `${process.env.HOME}/Downloads/Rakhmanov-Alisher-Frontend.pdf`;
+function resolveExistingFile(
+  candidates: (string | undefined | null)[],
+): string | null {
+  for (const candidate of candidates) {
+    if (candidate && existsSync(candidate)) {
+      try {
+        if (statSync(candidate).isFile()) {
+          return candidate;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return null;
+}
+
+const VIDEO_FILENAME = "Big_Buck_Bunny_1080_10s_5MB.mp4";
+const PDF_FILENAME = "Rakhmanov-Alisher-Frontend.pdf";
+
+function getVideoPath(): string | null {
+  return resolveExistingFile([
+    process.env.SEED_VIDEO_PATH,
+    resolve(process.cwd(), VIDEO_FILENAME),
+    resolve(process.cwd(), "..", VIDEO_FILENAME),
+    `/seed-files/${VIDEO_FILENAME}`,
+    `${process.env.HOME}/Downloads/${VIDEO_FILENAME}`,
+  ]);
+}
+
+function getPdfPath(): string | null {
+  return resolveExistingFile([
+    process.env.SEED_PDF_PATH,
+    resolve(process.cwd(), PDF_FILENAME),
+    resolve(process.cwd(), "..", PDF_FILENAME),
+    `/seed-files/${PDF_FILENAME}`,
+    `${process.env.HOME}/Downloads/${PDF_FILENAME}`,
+  ]);
+}
 
 const VIDEO_OBJECT_KEY = "seed/shared/video/Big_Buck_Bunny_1080_10s_5MB.mp4";
 const PDF_OBJECT_KEY = "seed/shared/materials/Rakhmanov-Alisher-Frontend.pdf";
@@ -332,14 +365,17 @@ async function seedCourses(
   prisma: PrismaClient,
   adminUser?: { id: string; email: string },
 ) {
-  const hasVideo = existsSync(VIDEO_PATH);
-  const hasPdf = existsSync(PDF_PATH);
+  const videoPath = getVideoPath();
+  const pdfPath = getPdfPath();
   let uploadedVideoKey: string | null = null;
   let uploadedPdfKey: string | null = null;
   let pdfSize = 0;
 
-  if (hasVideo && hasPdf) {
+  if (videoPath && pdfPath) {
     try {
+      console.log(
+        `==> Found seed media files:\n  Video: ${videoPath}\n  PDF: ${pdfPath}`,
+      );
       const bucket = process.env.MINIO_BUCKET ?? "tarih-storage";
       const minioClient = new Minio.Client({
         endPoint: process.env.MINIO_ENDPOINT ?? "localhost",
@@ -359,25 +395,25 @@ async function seedCourses(
         minioClient,
         bucket,
         VIDEO_OBJECT_KEY,
-        VIDEO_PATH,
+        videoPath,
         "video/mp4",
       );
       await uploadFile(
         minioClient,
         bucket,
         PDF_OBJECT_KEY,
-        PDF_PATH,
+        pdfPath,
         "application/pdf",
       );
       uploadedVideoKey = VIDEO_OBJECT_KEY;
       uploadedPdfKey = PDF_OBJECT_KEY;
-      pdfSize = statSync(PDF_PATH).size;
+      pdfSize = statSync(pdfPath).size;
     } catch (err) {
       console.warn("==> MinIO demo media upload skipped:", err);
     }
   } else {
     console.log(
-      "==> Mock media files not found on disk, creating courses without mock video/pdf files.",
+      `==> Seed media files not detected (video: ${videoPath}, pdf: ${pdfPath}). Creating courses without mock video/pdf files.`,
     );
   }
 
